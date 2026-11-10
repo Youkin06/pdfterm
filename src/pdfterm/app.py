@@ -1,6 +1,7 @@
 """pdfterm: a mouse-friendly PDF viewer for terminals with the kitty graphics protocol."""
 
 import argparse
+import math
 import os
 import signal
 import subprocess
@@ -28,6 +29,10 @@ DOUBLE_CLICK = 0.4
 FLIP_COOLDOWN = 0.3
 EDGE_HITS_TO_FLIP = 3
 ZOOM_SETTLE = 0.15  # seconds without zoom input before re-rendering sharply
+# Upper bound for one uploaded image. Multiplexers such as herdr re-send images to the
+# outer terminal as raw RGBA and drop anything over their per-frame budget (~30 MB in
+# herdr 0.9), so the image would silently disappear. 4M pixels is ~21 MB as base64 RGBA.
+TILE_MAX_PX = 4_000_000
 
 TEXT = {
     "en": {
@@ -146,6 +151,7 @@ class Viewer:
         self.tile = None  # what the terminal currently holds
         self.pending = None  # request being rendered
         self.next_id = 1
+        self.largest_tile = 0  # pixels; reported by PDFTERM_DEBUG
         self.renderer = Renderer(self.doc)
         self.chrome = ""  # last toolbar + status output, to skip redundant writes
         self.placed = b""
@@ -349,25 +355,34 @@ class Viewer:
 
     # --- tiles ------------------------------------------------------------
 
-    def wanted_tile(self):
-        """The page region worth rendering for the current view."""
-        W, H = self.page_px()
-        if W * H <= max(4 * self.vw * self.vh, 4_000_000):
+    def tile_zoom(self):
+        """Render zoom for tiles: the view zoom, lowered if even the viewport is too big."""
+        scale = min(1.0, math.sqrt(TILE_MAX_PX * 0.9 / (self.vw * self.vh)))
+        return self.zoom * scale
+
+    def wanted_tile(self, tz):
+        """The page region worth rendering at zoom `tz`, within TILE_MAX_PX pixels."""
+        W, H = self.page_px(tz)
+        if W * H <= TILE_MAX_PX:
             return 0, 0, int(W), int(H)  # small enough: render the whole page
-        # otherwise the view plus one viewport of margin on every side
-        x0 = max(0, int(self.sx - self.vw))
-        y0 = max(0, int(self.sy - self.vh))
-        x1 = min(int(W), int(self.sx + 2 * self.vw))
-        y1 = min(int(H), int(self.sy + 2 * self.vh))
+        # otherwise the view plus as much margin as the pixel budget allows
+        k = tz / self.zoom
+        vx, vy, vw, vh = self.sx * k, self.sy * k, self.vw * k, self.vh * k
+        b = vw + vh
+        margin = max(0.0, (-b + math.sqrt(b * b - 4 * (vw * vh - TILE_MAX_PX))) / 4)
+        x0, y0 = max(0, int(vx - margin)), max(0, int(vy - margin))
+        x1, y1 = min(int(W), int(vx + vw + margin)), min(int(H), int(vy + vh + margin))
         return x0, y0, x1 - x0, y1 - y0
 
     def tile_ok(self):
         t = self.tile
-        if t is None or t.page != self.page or abs(t.zoom - self.zoom) > 1e-6:
+        tz = self.tile_zoom()
+        if t is None or t.page != self.page or abs(t.zoom - tz) > 1e-6 * tz:
             return False
+        k = tz / self.zoom
         W, H = self.page_px()
-        vx0, vy0 = max(self.sx, 0), max(self.sy, 0)
-        vx1, vy1 = min(self.sx + self.vw, W), min(self.sy + self.vh, H)
+        vx0, vy0 = max(self.sx, 0) * k, max(self.sy, 0) * k
+        vx1, vy1 = min(self.sx + self.vw, W) * k, min(self.sy + self.vh, H) * k
         return t.x <= vx0 + 1 and t.y <= vy0 + 1 and vx1 - 1 <= t.x + t.w and vy1 - 1 <= t.y + t.h
 
     def request_tile(self):
@@ -377,7 +392,8 @@ class Viewer:
         same_page = self.tile is not None and self.tile.page == self.page
         if settling and same_page:
             return  # keep stretching the old tile while the wheel is still turning
-        req = (self.page, self.zoom) + self.wanted_tile()
+        tz = self.tile_zoom()
+        req = (self.page, tz) + self.wanted_tile(tz)
         if req != self.pending:
             self.pending = req
             self.renderer.submit(req)
@@ -394,23 +410,34 @@ class Viewer:
         image_id = self.next_id
         self.next_id = self.next_id % 1000 + 1
         self.tile = Tile(image_id, req[0], req[1], req[2], req[3], w, h)
+        self.largest_tile = max(self.largest_tile, w * h)
         self.term.write(kitty_upload(png, image_id))
         self.placed = b""
-        self.place()
-        if old is not None:
-            self.term.write(kitty_delete(old.image_id))
+        if self.place():
+            if old is not None:
+                self.term.write(kitty_delete(old.image_id))
+        else:
+            # the view moved off the new tile while it was rendering: keep showing the old
+            # one rather than leaving the screen empty, and render again
+            self.term.write(kitty_delete(image_id))
+            self.tile = old
+            self.placed = b""
+            self.place()
 
     def place(self):
-        """Show the current view from the uploaded tile (stretched if zoom differs)."""
+        """Show the current view from the uploaded tile (stretched if zoom differs).
+
+        Returns False when the tile has nothing to show for the current view.
+        """
         t = self.tile
         if t is None or t.page != self.page:
-            return
+            return False
         W, H = self.page_px()
         # visible part of the page, in viewport pixels
         dx0, dy0 = max(0.0, -self.sx), max(0.0, -self.sy)
         dx1, dy1 = min(float(self.vw), W - self.sx), min(float(self.vh), H - self.sy)
         if dx1 <= dx0 or dy1 <= dy0:
-            return
+            return False
         r = t.zoom / self.zoom  # tile pixels per view pixel
         sx0 = (self.sx + dx0) * r - t.x
         sy0 = (self.sy + dy0) * r - t.y
@@ -430,7 +457,7 @@ class Viewer:
             dy1 -= (sy1 - t.h) / r
             sy1 = t.h
         if dx1 <= dx0 or dy1 <= dy0:
-            return
+            return False
         col, row = int(dx0 // self.cw), int(dy0 // self.ch)
         offset = (int(dx0 - col * self.cw), int(dy0 - row * self.ch))
         cells = None
@@ -443,6 +470,7 @@ class Viewer:
         if seq != self.placed:
             self.term.write(seq)
             self.placed = seq
+        return True
 
     def toolbar(self):
         t = self.t
@@ -578,7 +606,8 @@ def main(argv=None):
             with open(log, "a") as f:
                 f.write(
                     f"cell={term.cell} pixel_mouse={term.pixel_mouse} "
-                    f"rows={viewer.rows} cols={viewer.cols} bytes={term.bytes_written}\n"
+                    f"rows={viewer.rows} cols={viewer.cols} bytes={term.bytes_written} "
+                    f"largest_tile={viewer.largest_tile}\n"
                 )
 
 
