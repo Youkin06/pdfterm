@@ -56,11 +56,7 @@ TEXT = {
         "width": "Width",
         "quit": "Quit",
         "goto": "Go to page: ",
-        "hint": "Drag: select text (copied) · Wheel: scroll · Ctrl+wheel: zoom · v: select/move · g: page · q: quit",
-        "hint_hand": "Drag: move · Double-click: zoom · Wheel: scroll · Ctrl+wheel: zoom · v: select/move · q: quit",
         "bad_page": "No such page",
-        "select": "Select",
-        "hand": "Move",
         "copied": "Copied {n} characters",
         "no_text": "No text here (scanned page?)",
     },
@@ -69,11 +65,7 @@ TEXT = {
         "width": "幅",
         "quit": "閉じる",
         "goto": "ページ番号: ",
-        "hint": "ドラッグ: 文字を選択（自動でコピー） · ホイール: スクロール · Ctrl+ホイール: ズーム · v: 選択/移動 · g: ページ指定 · q: 終了",
-        "hint_hand": "ドラッグ: 移動 · ダブルクリック: 拡大 · ホイール: スクロール · Ctrl+ホイール: ズーム · v: 選択/移動 · q: 終了",
         "bad_page": "そのページはありません",
-        "select": "選択",
-        "hand": "移動",
         "copied": "{n}文字をコピーしました",
         "no_text": "ここには文字のデータがありません（スキャンしたページ？）",
     },
@@ -813,16 +805,14 @@ class Viewer:
         fit = (f" {t['fit']} ", lambda: self.set_mode("fit"), "fit")
         wide = (f" {t['width']} ", lambda: self.set_mode("width"), "width")
         quit_long, quit_short = (f" ✕ {t['quit']} ", self.quit), (" ✕ ", self.quit)
-        icon = "Ｉ" if self.tool == "select" else "✋"
-        tool = (f" {icon} {t[self.tool]} ", self.toggle_tool)
 
         # drop the least important parts until the bar fits the pane width
         layouts = [
-            ([prev, nxt, (page, self.start_prompt), tool, out_, level, in_, fit, wide], quit_long),
-            ([prev, nxt, (page, self.start_prompt), tool, out_, level, in_, fit, wide], quit_short),
-            ([prev, nxt, (page, self.start_prompt), tool, out_, level, in_, fit], quit_short),
-            ([prev, nxt, (page, self.start_prompt), tool, out_, in_, fit], quit_short),
-            ([prev, nxt, (page, self.start_prompt), tool, out_, in_], quit_short),
+            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit, wide], quit_long),
+            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit, wide], quit_short),
+            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit], quit_short),
+            ([prev, nxt, (page, self.start_prompt), out_, in_, fit], quit_short),
+            ([prev, nxt, (page, self.start_prompt), out_, in_], quit_short),
         ]
         for items, right in layouts:
             need = sum(width(i[0]) + 1 for i in items) + width(right[0])
@@ -858,8 +848,7 @@ class Viewer:
         elif self.message and time.time() < self.message_until:
             text = f"\x1b[33m{clip(self.message, self.cols - 1)}\x1b[0m"
         else:
-            hint = self.t["hint" if self.tool == "select" else "hint_hand"]
-            text = f"\x1b[2m{clip(hint, self.cols - 1)}\x1b[0m"
+            text = "\x1b[2mq: quit\x1b[0m"
         return f"\x1b[{self.rows};1H\x1b[2K" + text
 
     def draw(self):
@@ -911,6 +900,7 @@ class Viewer:
                 or time.time() - self.last_zoom < ZOOM_SETTLE * 2
             )
             for ev in self.term.read_events(timeout=0.01 if busy else 0.1):
+                self.trace(f"event {ev}")
                 self.handle(ev)
                 if not self.running:
                     break

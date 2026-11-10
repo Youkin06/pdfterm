@@ -8,11 +8,11 @@ Ctrl+wheel, and click the toolbar buttons.
 ターミナルの中で動く、マウスで操作できる PDF ビューアーです。（日本語の説明は下にあります）
 
 ```
- ◀   ▶   1/3   Ｉ Select   −   78%   ＋   Fit   Width   report.pdf  ✕ Quit
+ ◀   ▶   1/3   −   78%   ＋   Fit   Width   report.pdf          ✕ Quit
 ┌──────────────────────────────────────────────────────────────────┐
 │                         (the PDF page)                           │
 └──────────────────────────────────────────────────────────────────┘
- Drag: select text (copied) · Wheel: scroll · Ctrl+wheel: zoom · v: select/move
+ q: quit
 ```
 
 ## Requirements
@@ -48,10 +48,10 @@ pdfterm file.pdf --page 5
 | Ctrl + wheel | Zoom in/out around the mouse pointer |
 | Swipe left / right (trackpad), Shift + wheel | Next / previous page (scrolls sideways first when the page is wider than the window) |
 | Right or middle drag | Move the page around |
-| Toolbar | ◀ ▶ previous/next page · page number: go to page · Ｉ/✋ switch between selecting text and moving the page · − ＋ zoom · Fit · Width · ✕ quit |
+| Toolbar | ◀ ▶ previous/next page · page number: go to page · − ＋ zoom · Fit · Width · ✕ quit |
 
-With the move tool (✋, or press `v`), a left drag moves the page and a double-click zooms
-in 2× / back to the whole page.
+Press `v` to make the left drag move the page instead of selecting text (a double-click then
+zooms in 2× / back to the whole page); press `v` again to go back.
 
 ### Keyboard
 
@@ -111,7 +111,7 @@ pdfterm ファイル.pdf
 | Ctrl + ホイール | マウスの位置を中心にズーム |
 | 左右スワイプ（トラックパッド）、Shift + ホイール | 右→左で次のページ、左→右で前のページ（ページが横にはみ出しているときは、先に左右にスクロール） |
 | 右ドラッグ | ページを動かす |
-| 上のボタン | ◀ ▶ ページ送り · ページ番号を押すとページ指定 · Ｉ/✋ 文字選択と移動の切り替え · − ＋ ズーム · 全体 · 幅 · ✕ 閉じる |
+| 上のボタン | ◀ ▶ ページ送り · ページ番号を押すとページ指定 · − ＋ ズーム · 全体 · 幅 · ✕ 閉じる |
 | v | 文字選択 / 移動 の切り替え（移動のときは、左ドラッグでページを動かし、ダブルクリックで拡大） |
 | g → 数字 → Enter | ページを指定して移動 |
 | q | 終了 |
