@@ -241,6 +241,11 @@ Two environment variables help when tuning input and rendering:
 - `SEE_DEBUG=/path/to/log` writes the detected cell size, mouse mode, bytes sent and the
   largest image on exit.
 
+To release a new version, note the changes under `## Unreleased` in CHANGELOG.md and run
+`scripts/release.sh X.Y.Z`. It bumps the version, merges it through a pull request once CI
+passes, tags it, and updates the Homebrew formula in
+[Youkin06/homebrew-tap](https://github.com/Youkin06/homebrew-tap).
+
 See [CHANGELOG.md](CHANGELOG.md) for the history.
 
 ## License

@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- `scripts/release.sh X.Y.Z` releases a version in one go: version bump, PR, CI, merge, tag
+  and the Homebrew formula update.
 - Automated tests (input parsing, file-type detection, swipes, zoom, tile budget, video
   detection, the command line) and GitHub Actions running them on macOS and Linux with
   Python 3.10 and 3.13.
