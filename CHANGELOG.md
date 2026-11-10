@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+- Automated tests (input parsing, file-type detection, swipes, zoom, tile budget, video
+  detection, the command line) and GitHub Actions running them on macOS and Linux with
+  Python 3.9 and 3.13.
+
 ### Fixed
 - In terminals without the kitty graphics protocol (e.g. macOS Terminal.app) see now says so
   and exits, instead of showing a blank or garbled screen. `SEE_FORCE_GRAPHICS=1` skips the check.

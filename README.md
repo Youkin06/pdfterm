@@ -230,8 +230,9 @@ seek bar.
 git clone https://github.com/Youkin06/see
 cd see
 python3 -m venv .venv
-.venv/bin/pip install -e .
+.venv/bin/pip install -e ".[test]"
 .venv/bin/see some.pdf
+.venv/bin/pytest -q            # tests (also run on GitHub for every pull request)
 ```
 
 Two environment variables help when tuning input and rendering:

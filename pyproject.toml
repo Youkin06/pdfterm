@@ -19,6 +19,9 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 
+[project.optional-dependencies]
+test = ["pytest", "pyflakes"]
+
 [project.urls]
 Homepage = "https://github.com/Youkin06/see"
 
