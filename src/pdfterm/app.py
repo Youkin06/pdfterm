@@ -737,19 +737,27 @@ class Viewer:
         wide = (" Width ", lambda: self.set_mode("width"), "width")
         close = " ✕ "
 
-        # drop the least important parts until the bar fits the pane width
+        name = os.path.basename(self.path)
+        # the file name comes first; drop the least important parts until the rest fits
+        # next to at least a recognisable piece of it
+        name_min = min(width(name), 12)
         layouts = [
             [page, level, fit, wide],
             [page, level, fit],
             [page, fit],
             [page],
+            [],
         ]
         for items in layouts:
-            if sum(width(i[0]) + 1 for i in items) + width(close) <= self.cols:
+            rest = sum(width(i[0]) + 1 for i in items) + width(close)
+            if 1 + name_min + 2 + rest <= self.cols:
                 break
+        room = max(0, self.cols - rest - 3)
+        title = name if width(name) <= room else clip(name, max(0, room - 1)) + "…"
 
         self.buttons = []
-        out, x = [], 1
+        out = [f"\x1b[0;1m {title}\x1b[0m  "]
+        x = 1 + 1 + width(title) + 2
         for item in items:
             label, action = item[0], item[1]
             w = width(label)
@@ -763,9 +771,6 @@ class Viewer:
                 self.buttons.append((x, x + w - 1, action))
             x += w + 1
         cx = self.cols - width(close) + 1
-        room = cx - x - 1
-        if room > 6:
-            out.append(f"\x1b[2m{clip(os.path.basename(self.path), room)}\x1b[0m")
         # place the close button by absolute position so it never wraps
         out.append(f"\x1b[1;{cx}H\x1b[0m{close}")
         self.buttons.append((cx, self.cols, self.quit))
