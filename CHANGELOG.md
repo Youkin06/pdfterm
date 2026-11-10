@@ -4,10 +4,26 @@
 
 ### Added
 - Images: PNG, JPEG, WebP, AVIF, BMP, TIFF and anything else Pillow reads, plus HEIC/HEIF on
-  macOS (converted with `sips`). EXIF rotation is applied. Animated GIFs show their first frame.
+  macOS (converted with `sips`). EXIF rotation is applied.
+- Animated GIF, APNG and animated WebP play in a loop, each frame for its own duration.
+  Click the picture or press Space to pause; while paused, ← / → step through the frames.
+  Zoom and dragging work as for still images, and the bottom line shows `Paused` and the
+  frame number.
+- Animation frames are rendered once per zoom level and uploaded once, packed into a few
+  large images; playing only re-places them, so herdr does not re-send pixels on every
+  frame. Animations over the frame budget (14 million pixels) are rendered frame by frame.
 - The file type is detected from the content. Unsupported files get a clear error message.
 - For images the left drag moves the picture (there is no text to select), and the page
   counter is hidden for single-page documents.
+- Documents, text and SVG open too, converted to PDF so pages, zoom and text selection work:
+  - Office and iWork files (.docx, .doc, .rtf, .odt, .xlsx, .xls, .pptx, .ppt, .key, .numbers,
+    .pages, …) through LibreOffice when it is installed, otherwise on macOS through the
+    built-in text system and Quick Look previews, with a Quick Look thumbnail as last resort.
+  - Text, Markdown, source code, logs and JSON as pages in a monospace font (Japanese
+    included, Shift_JIS files too); CSV/TSV as a table.
+  - HTML and SVG, drawn by WebKit on macOS.
+  - Conversions are cached, have timeouts, show a short `see: converting …` note, and fail
+    with a one-line error.
 - Video playback: `see movie.mp4` (MP4, MOV, MKV, WebM, AVI, …) plays the video with its
   sound. ffmpeg decodes the frames at the shown size (up to ~400k pixels, 30 fps) and late
   frames are skipped; ffplay plays the sound and the picture follows its clock. Click the

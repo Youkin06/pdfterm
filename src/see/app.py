@@ -100,6 +100,8 @@ def highlight_image():
 class Tile:
     """A rendered region of one page, uploaded to the terminal as an image."""
 
+    ox = oy = 0  # where the tile starts inside its image (animation frames share one)
+
     def __init__(self, image_id, page, zoom, x, y, w, h, z=0):
         self.image_id, self.page, self.zoom, self.z = image_id, page, zoom, z
         self.x, self.y, self.w, self.h = x, y, w, h  # page pixels at self.zoom
@@ -203,6 +205,11 @@ class Viewer:
         self.dirty = True
         self.resized = True
         self.running = True
+        self.anim = None  # plays animated images in place of the tile renderer
+        if getattr(self.doc, "animated", False):
+            from .anim import Animator
+
+            self.anim = Animator(self)
 
     # --- geometry ---------------------------------------------------------
 
@@ -366,6 +373,8 @@ class Viewer:
             self.on_key(ev)
 
     def on_key(self, k):
+        if self.anim and self.anim.on_key(k):
+            return
         step_y = self.ch * 3
         c = k.char if k.name == "char" else ""
         alt = k.char if k.name == "alt" else ""
@@ -464,8 +473,12 @@ class Viewer:
         if not m.pressed and self.drag:
             moved = self.drag[4]
             self.drag = None
-            if not moved and self.is_double_click(m):
-                self.toggle_zoom(px, py)
+            if not moved:
+                double = self.is_double_click(m)
+                if self.anim:
+                    self.anim.click(px, py, double)
+                if double:
+                    self.toggle_zoom(px, py)
 
     def toggle_zoom(self, px, py):
         """Double-click: zoom in 2x at the pointer, or back to the whole page."""
@@ -610,6 +623,8 @@ class Viewer:
         )
 
     def request_tile(self):
+        if self.anim:
+            return self.anim.request()
         if self.tile_ok() and not self.near_tile_edge():
             return
         settling = time.time() - self.last_zoom < ZOOM_SETTLE
@@ -643,6 +658,8 @@ class Viewer:
         return out
 
     def receive_tile(self):
+        if self.anim:
+            return self.anim.tick()
         res = self.renderer.take()
         if res is None:
             return
@@ -723,7 +740,8 @@ class Viewer:
                 max(1, round((dy1 - row * self.ch) / self.ch)),
             )
         seq = kitty_place(
-            t.image_id, row + 2, col + 1, (sx0, sy0, sx1 - sx0, sy1 - sy0), offset, cells, t.z
+            t.image_id, row + 2, col + 1, (sx0 + t.ox, sy0 + t.oy, sx1 - sx0, sy1 - sy0),
+            offset, cells, t.z,
         )
         if seq != self.placed:
             self.term.write(seq)
@@ -782,7 +800,8 @@ class Viewer:
         if self.message and time.time() < self.message_until:
             text = f"\x1b[33m{clip(self.message, self.cols - 1)}\x1b[0m"
         else:
-            text = f"\x1b[2m{clip('Double-click: zoom   q: quit', self.cols - 1)}\x1b[0m"
+            hint = self.anim.hint() if self.anim else "Double-click: zoom   q: quit"
+            text = f"\x1b[2m{clip(hint, self.cols - 1)}\x1b[0m"
         return f"\x1b[{self.rows};1H\x1b[2K" + text
 
     def draw(self):
@@ -830,7 +849,10 @@ class Viewer:
                 or bool(self.retired)
                 or time.time() - self.last_zoom < ZOOM_SETTLE * 2
             )
-            for ev in self.term.read_events(timeout=0.01 if busy else 0.1):
+            timeout = 0.01 if busy else 0.1
+            if self.anim:
+                timeout = self.anim.timeout(timeout)
+            for ev in self.term.read_events(timeout=timeout):
                 self.trace(f"event {ev}")
                 self.handle(ev)
                 if not self.running:
