@@ -4,7 +4,14 @@
 
 ### Added
 - Images: PNG, JPEG, WebP, AVIF, BMP, TIFF and anything else Pillow reads, plus HEIC/HEIF on
-  macOS (converted with `sips`). EXIF rotation is applied. Animated GIFs show their first frame.
+  macOS (converted with `sips`). EXIF rotation is applied.
+- Animated GIF, APNG and animated WebP play in a loop, each frame for its own duration.
+  Click the picture or press Space to pause; while paused, ← / → step through the frames.
+  Zoom and dragging work as for still images, and the bottom line shows `Paused` and the
+  frame number.
+- Animation frames are rendered once per zoom level and uploaded once, packed into a few
+  large images; playing only re-places them, so herdr does not re-send pixels on every
+  frame. Animations over the frame budget (14 million pixels) are rendered frame by frame.
 - The file type is detected from the content. Unsupported files get a clear error message.
 - For images the left drag moves the picture (there is no text to select), and the page
   counter is hidden for single-page documents.

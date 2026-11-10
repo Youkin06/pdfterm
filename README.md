@@ -1,11 +1,11 @@
 # see
 
-A mouse-friendly viewer for the terminal. It opens PDF files and images today; animated GIFs
-and video are coming next. Everything is drawn as real images with the
+A mouse-friendly viewer for the terminal. It opens PDF files and images, and plays animated
+GIF, PNG and WebP; video is coming next. Everything is drawn as real images with the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/), and you use it
 like a GUI viewer: swipe to turn pages, drag to select and copy text, double-click to zoom.
 
-ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF と画像に対応。GIF アニメと動画も対応予定）。（[日本語の説明](#日本語)）
+ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF、画像、GIF などのアニメーションに対応。動画も対応予定）。（[日本語の説明](#日本語)）
 
 ```
  report.pdf   3/12   82%   Fit   Width                                  ✕
@@ -24,7 +24,7 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
 | PDF | ✅ Supported |
 | Images: PNG, JPEG, WebP, AVIF, BMP, TIFF, … | ✅ Supported (anything [Pillow](https://python-pillow.org) reads) |
 | iPhone photos (HEIC / HEIF) | ✅ On macOS (converted with the built-in `sips`) |
-| Animated GIF | Shows the first frame; animation is planned |
+| Animated GIF, APNG, animated WebP | ✅ Plays in a loop; click or Space to pause |
 | Video (MP4, MOV, …) | Planned (a 30 fps prototype runs smoothly) |
 
 ## Requirements
@@ -71,6 +71,7 @@ see photo.png
 | Swipe or wheel up / down | Scroll the page; turns one page at the top or bottom, or when the whole page is visible |
 | Drag | PDFs: select text; it is copied to the clipboard when you release. Images: move the picture |
 | Double-click | Zoom in 2× at that spot / back to the whole page |
+| Click the picture | Animations: play / pause |
 | Ctrl + wheel | Zoom in or out around the pointer |
 | Right or middle drag | Move a zoomed page around |
 | Shift + wheel | Same as a sideways swipe: scrolls a page wider than the window, otherwise turns the page |
@@ -89,6 +90,8 @@ One swipe turns exactly one page, also when the trackpad's momentum keeps scroll
 | 0 or f | Whole page (Fit) |
 | w | Fit width |
 | v | Make the left drag move the page instead of selecting text (press again to go back) |
+| Space | Animations: play / pause (instead of next page) |
+| → / ← while paused | Animations: next / previous frame |
 | Esc | Clear the selection (quits when nothing is selected) |
 | q | Quit |
 
@@ -101,6 +104,11 @@ them as copy and as "select the whole page".
 - **Scanned PDFs** contain pictures of text, not text, so nothing can be selected on them.
 - **Images** are shown at 100% when one image pixel is one screen pixel; enlarging a small
   image a lot keeps hard pixel edges (good for pixel art and icons).
+- **Animations** loop forever (the file's loop count is ignored). Each frame is shown for
+  its own duration; frames asking for 10 ms or less get 100 ms, as in web browsers. Long or
+  large animations that do not fit the frame budget (see below) are rendered frame by
+  frame, which is slower, especially inside herdr. When the zoom enlarges an animation
+  beyond what fits, its frames are rendered a little smaller and stretched by the terminal.
 - **Pinch to zoom** is not possible: terminals do not pass pinch gestures to programs. Use a
   double-click, Ctrl + wheel or the + / − keys.
 - Inside a multiplexer such as herdr, every new page image is passed on to the outer
@@ -120,6 +128,12 @@ them as copy and as "select the whole page".
   such as herdr re-send images uncompressed and drop ones over their limit.
 - Rendering runs in a background thread, and the pages before and after the current one are
   rendered while idle.
+- Animations are rendered frame by frame at the current zoom and uploaded once, packed
+  into a few images of up to 4 million pixels (an "atlas"). Playing then only re-places the
+  picture with another part of an atlas, a few bytes per frame. All frames together are
+  kept under 14 million pixels, because herdr keeps at most 16 images that are not on
+  screen (64 MB of pixels) and sends anything it dropped again. After a zoom the frames are
+  rendered again in the background while the old ones keep playing.
 - Trackpad swipes are recognised from the rate of scroll events: a page turns when the rate
   rises sharply, and turning re-arms when it has fallen well below its peak.
 
@@ -158,7 +172,7 @@ MIT
 | PDF | ✅ 対応 |
 | 画像（PNG、JPEG、WebP、AVIF、BMP、TIFF など） | ✅ 対応（Pillow で読めるもの） |
 | iPhone の写真（HEIC / HEIF） | ✅ Mac で対応（Mac 標準の `sips` で変換） |
-| GIF アニメ | 最初のコマだけ表示。アニメーションは対応予定 |
+| アニメーション（GIF、APNG、WebP） | ✅ くり返し再生。クリックか Space で一時停止 |
 | 動画（MP4、MOV など） | 対応予定（30fps の試作はなめらかに動作） |
 
 ### 必要なもの
@@ -195,6 +209,7 @@ see 写真.png
 | 上下にスワイプ、ホイール | スクロール（ページの端や、ページ全体が見えているときは1ページめくる） |
 | ドラッグ | PDF：文字を選択（離すと自動でコピー）。画像：画像を動かす |
 | ダブルクリック | その場所を2倍に拡大 / ページ全体に戻す |
+| 画像をクリック | アニメーション：再生 / 一時停止 |
 | Ctrl + ホイール | マウスの位置を中心にズーム |
 | 右ドラッグ | 拡大したページを動かす |
 | Shift + ホイール | 左右スワイプと同じ（ページが横にはみ出していれば左右にスクロール、そうでなければページをめくる） |
@@ -213,6 +228,8 @@ see 写真.png
 | 0 または f | ページ全体（Fit） |
 | w | 幅に合わせる（Width） |
 | v | 左ドラッグを「文字の選択」と「ページの移動」で切り替え |
+| Space | アニメーション：再生 / 一時停止（次のページではなく） |
+| 一時停止中の → / ← | アニメーション：次 / 前のコマ |
 | Esc | 選択を解除（何も選択していなければ終了） |
 | q | 終了 |
 
@@ -222,5 +239,6 @@ see 写真.png
 
 - **スキャンした PDF**：中身が文字ではなく写真なので、文字を選べません。
 - **画像の倍率**：画像の1画素が画面の1画素になる大きさが 100% です。小さい画像を大きく拡大したときは、ドット絵やアイコンがぼやけないよう、画素の角を残して拡大します。
+- **アニメーション**：ずっとくり返します（ファイルの再生回数は使いません）。コマごとの表示時間を守り、10ms 以下のコマはブラウザと同じく 100ms にします。全コマを一度に送れないほど長い・大きいアニメーションは1コマずつ描いて送るため、特に herdr の中では遅くなります。拡大しすぎて入りきらないときは、少し小さく描いてターミナルに引き伸ばしてもらいます。
 - **ピンチでのズーム**：ターミナルはピンチ操作をアプリに渡さないため使えません。ダブルクリック、Ctrl + ホイール、+ / − キーを使ってください。
 - herdr などの中では、新しいページの画像を外側のターミナルに渡すのに少し時間がかかります。スクロールやドラッグは送ってある画像を動かすだけで、前後のページも先に用意しているので、待ち時間を感じるのは主にズームのときです。
