@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "see-viewer"
-version = "0.2.0"
-description = "see: a mouse- and trackpad-friendly viewer for the terminal (kitty graphics protocol: Ghostty, kitty, WezTerm). Opens PDFs and images."
+version = "0.3.0"
+description = "see: a mouse- and trackpad-friendly viewer for the terminal (kitty graphics protocol: Ghostty, kitty, WezTerm). Opens PDFs, images, Office documents, text, animations and video."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
