@@ -4,6 +4,7 @@
 
 ### Added
 - Video: a sound on/off button (🔊 / 🔇) at the bottom right of the player; `m` toggles it too.
+  It is always shown (dimmed for videos without sound).
 - A demo GIF at the top of the README (`docs/demo.gif`): a blue gradient background,
   sample files in one matching palette, ending on a `❯see` prompt.
 

@@ -436,7 +436,11 @@ class Player:
     def toggle_mute(self):
         """Sound on/off. Muted, the sound process is stopped and the picture keeps its own
         clock; unmuted, the sound starts again from the current position."""
-        if not (self.info.has_audio and self.ffplay):
+        if not self.info.has_audio:
+            self.flash("This video has no sound")
+            return
+        if not self.ffplay:
+            self.flash("No sound: ffplay was not found")
             return
         self.pos0, self.t0 = self.position(), self.clock()
         self.muted = not self.muted
@@ -576,17 +580,18 @@ class Player:
         times = now + (f" / {total}" if total else "")
         left = f" {icon} {times}  "
         self.icon = (2, 1 + width(icon))
-        # sound on/off at the bottom right: 🔊 / 🔇 are a matching emoji pair (2 columns each)
-        sound = ""
-        self.mute_btn = None
-        if self.info.has_audio and self.ffplay:
-            sound = "  " + ("🔇" if self.muted else "🔊") + " "
-            self.mute_btn = (self.cols - width(sound) + 3, self.cols - 1)
-        cells = self.cols - width(left) - width(sound) - 1
+        # sound on/off at the bottom right: 🔊 / 🔇 are a matching emoji pair (2 columns each).
+        # Always shown, so it is clear where it is; dimmed when the video has no sound.
+        audible = self.info.has_audio and self.ffplay
+        icon_s = "🔇" if self.muted or not audible else "🔊"
+        sound = "  " + (icon_s if audible else f"\x1b[2m{icon_s}\x1b[0m") + " "
+        sound_w = 5
+        self.mute_btn = (self.cols - sound_w + 3, self.cols - 1)
+        cells = self.cols - width(left) - sound_w - 1
         if not self.duration or cells < 5:
             self.bar = None
-            line = clip(left, self.cols - width(sound))
-            return row + line + (f"\x1b[{self.rows};{self.cols - width(sound) + 1}H{sound}" if sound else "")
+            line = clip(left, self.cols - sound_w)
+            return row + line + f"\x1b[{self.rows};{self.cols - sound_w + 1}H{sound}"
         frac = min(1.0, max(0.0, p / self.duration))
         k = round(frac * (cells - 1))
         self.bar = (width(left) + 1, cells)

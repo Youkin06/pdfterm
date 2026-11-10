@@ -50,7 +50,8 @@ see movie.mp4
 | q | Quit |
 
 For video: click or Space to play / pause, click the seek bar to jump, ← / → for 5 seconds,
-click 🔊 at the bottom right (or press m) to turn the sound off and on.
+click 🔊 at the bottom right (or press m) to turn the sound off and on (dimmed when the
+video has no sound).
 
 ## Development
 
