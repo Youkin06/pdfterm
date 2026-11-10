@@ -843,7 +843,7 @@ class Viewer:
         elif self.message and time.time() < self.message_until:
             text = f"\x1b[33m{clip(self.message, self.cols - 1)}\x1b[0m"
         else:
-            text = "\x1b[2mq: quit\x1b[0m"
+            text = f"\x1b[2m{clip('Double-click: zoom · q: quit', self.cols - 1)}\x1b[0m"
         return f"\x1b[{self.rows};1H\x1b[2K" + text
 
     def draw(self):
