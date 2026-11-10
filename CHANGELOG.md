@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Install with Homebrew: `brew install youkin06/tap/see` (tap: https://github.com/Youkin06/homebrew-tap).
+
 ### Changed
 - Files of an unsupported kind get a friendlier message that says what see can open:
   `see: model.stl isn't a file see can show. It opens PDFs, images, animated GIFs, videos,

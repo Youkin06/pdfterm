@@ -50,8 +50,18 @@ can open.
 
 ## Install
 
-The command is `see`; the Python package is called `see-viewer` (the name `see` is taken on
-PyPI).
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install youkin06/tap/see
+brew install ffmpeg            # only needed for videos
+```
+
+Update with `brew upgrade see`, uninstall with `brew uninstall see`. Homebrew installs see
+from source, so it needs up-to-date Command Line Tools (if it complains, update them from
+System Settings → Software Update).
+
+Or with pipx / uv (the Python package is called `see-viewer`, because `see` is taken on PyPI):
 
 ```sh
 pipx install git+https://github.com/Youkin06/see
@@ -265,6 +275,17 @@ MIT
 - 動画を見るときは ffmpeg（`ffmpeg` と `ffprobe`、音を出すには `ffplay`）。`brew install ffmpeg` などで入れてください。PDF と画像には不要です。
 
 ### インストール
+
+Homebrew で入れる場合：
+
+```sh
+brew install youkin06/tap/see
+brew install ffmpeg            # 動画を見るときだけ必要
+```
+
+更新は `brew upgrade see`、アンインストールは `brew uninstall see` です。Homebrew はソースから入れるため、Mac の Command Line Tools が新しい必要があります（エラーが出たら、システム設定 → ソフトウェアアップデートで更新してください）。
+
+pipx で入れる場合：
 
 ```sh
 pipx install git+https://github.com/Youkin06/see
