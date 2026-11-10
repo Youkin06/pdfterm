@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import collections
 import math
 import shutil
 import os
@@ -29,11 +30,9 @@ ZOOM_STEP = 1.1
 ZOOM_MIN_FACTOR = 0.25  # relative to fit-page
 ZOOM_MAX = 16.0  # pixels per point
 DOUBLE_CLICK = 0.4
-WHEEL_GESTURE_GAP = 0.35  # seconds of wheel silence that end a scroll gesture
-WHEEL_AFTER_FLIP_GAP = 0.6  # longer silence needed after a page turn (momentum tail)
-WHEEL_EVENTS_TO_FLIP = 3  # wheel events in one gesture before a page turn
-AXIS_DECIDE_EVENTS = 3  # events looked at before locking a gesture to one axis
-EDGE_HITS_TO_FLIP = 3
+SWIPE_WINDOW = 0.1  # seconds of wheel events used to measure the current rate
+SWIPE_MIN_EVENTS = 3  # events within the window needed to turn a page
+SWIPE_REARM = 0.35  # turning re-arms when the rate falls below this share of its peak
 ZOOM_SETTLE = 0.15  # seconds without zoom input before re-rendering sharply
 # Upper bound for one uploaded image. Multiplexers such as herdr re-send images to the
 # outer terminal as raw RGBA and drop anything over their per-frame budget (~30 MB in
@@ -235,13 +234,12 @@ class Viewer:
         self.highlight = b""
         self.highlight_sent = False  # the translucent image is uploaded on first use
         self.last_click = (0.0, 0, 0)
-        self.last_wheel = 0.0
-        self.flipped_this_gesture = False
-        self.wheel_events = 0
-        self.axis = None  # "x" or "y": the axis the current wheel gesture is locked to
-        self.axis_counts = {"x": 0, "y": 0}
+        self.clock = time.time
+        self.wheel_window = collections.deque()  # (time, button) of recent wheel events
+        self.swipe_armed = True  # may the next burst of wheel events turn a page?
+        self.swipe_peak = 0  # highest event rate since the last page turn
+        self.swipe_valley = 0  # lowest event rate since re-arming
         self.last_zoom = 0.0
-        self.edge_hits = 0
         self.tile = None  # what the terminal currently shows
         self.retired = []  # (delete_at, image_id): old images kept briefly to avoid flashes
         self.z = 0
@@ -308,7 +306,6 @@ class Viewer:
         W, H = self.page_px()
         self.sy = H - self.vh if at_bottom else 0
         self.clamp()
-        self.edge_hits = 0
         self.dirty = True
 
     def set_mode(self, mode):
@@ -318,83 +315,91 @@ class Viewer:
 
     # --- scrolling --------------------------------------------------------
 
-    def scroll_y(self, dy, wheel=False):
-        """Scroll vertically; at the page edge (or when the page fits) turn the page."""
+    def scroll_y(self, dy):
+        """Scroll vertically (keyboard); at the page edge or when the page fits, turn it."""
         W, H = self.page_px()
-        fits = H <= self.vh + 1
         at_edge = (dy > 0 and self.sy >= H - self.vh - 1) or (dy < 0 and self.sy <= 1)
-        if fits or at_edge:
-            self.turn(dy > 0, fits, wheel, at_bottom=dy < 0)
+        if H <= self.vh + 1 or at_edge:
+            self.go(self.page + (1 if dy > 0 else -1), at_bottom=dy < 0)
             return
-        self.edge_hits = 0
         self.sy += dy
         self.clamp()
         self.dirty = True
 
-    def swipe_x(self, forward):
-        """Horizontal swipe: turn the page, or pan first when the page is wider than the view."""
-        W, H = self.page_px()
-        fits = W <= self.vw + 1
-        at_edge = (forward and self.sx >= W - self.vw - 1) or (not forward and self.sx <= 1)
-        if fits or at_edge:
-            self.turn(forward, fits, True)
-            return
-        self.edge_hits = 0
-        self.scroll_x(self.cw * 3 if forward else -self.cw * 3)
-
-    def turn(self, forward, fits, wheel, at_bottom=False):
-        """Turn one page, with the safeguards that wheel/trackpad input needs."""
-        if wheel and self.wheel_events < WHEEL_EVENTS_TO_FLIP:
-            return  # stray events (end of momentum) do not turn pages
-        if not fits:
-            self.edge_hits += 1  # a little resistance before leaving a zoomed page
-            if self.edge_hits < EDGE_HITS_TO_FLIP:
-                return
-        target = self.page + (1 if forward else -1)
-        if 0 <= target < len(self.doc):
-            self.go(target, at_bottom=at_bottom)
-            self.flipped_this_gesture = wheel
+    def trace(self, text):
+        """Developer aid: with PDFTERM_TRACE=file, log input decisions there."""
+        path = os.environ.get("PDFTERM_TRACE")
+        if path:
+            with open(path, "a") as f:
+                f.write(f"{time.time():.3f} {text}\n")
 
     def on_wheel(self, m, px, py):
-        """Wheel and trackpad scrolling.
+        """Wheel and trackpad scrolling: scroll a zoomed page, turn pages with swipes.
 
-        Events closer together than WHEEL_GESTURE_GAP form one gesture. Each gesture is
-        locked to the axis most of its first events use, because a trackpad swipe is never
-        perfectly straight: without the lock, the small vertical part of a sideways swipe
-        turned pages in whatever direction the fingers happened to drift. A gesture turns
-        at most one page, and after a turn the rest of it (momentum) is ignored.
+        A trackpad sends 100-250 events a second, and one swipe overlaps the momentum of
+        the previous one, so pauses cannot separate swipes. Instead each swipe is a burst:
+        the event rate rises, peaks and falls. A page turns when the rate rises sharply in
+        one direction (and the page cannot scroll further that way); after that, turning is
+        disarmed until the rate falls well below its peak. Momentum only ever slows down,
+        so it cannot turn a second page, while a new swipe rises again and turns the next.
+        The direction is the one most events in the last moment point to, so the small
+        vertical drift of a sideways swipe (or the reverse) does not matter.
         """
-        vertical = m.button in (WHEEL_UP, WHEEL_DOWN) and not m.shift
         if m.ctrl and m.button in (WHEEL_UP, WHEEL_DOWN):
             self.zoom_at(ZOOM_STEP if m.button == WHEEL_UP else 1 / ZOOM_STEP, px, py)
             return
-        now = time.time()
-        gap = now - self.last_wheel
-        self.last_wheel = now
-        if self.flipped_this_gesture:
-            if gap <= WHEEL_AFTER_FLIP_GAP:
-                return
-            self.flipped_this_gesture = False
-            gap = float("inf")
-        if gap > WHEEL_GESTURE_GAP:  # a new gesture
-            self.axis, self.axis_counts = None, {"x": 0, "y": 0}
-            self.wheel_events = 0
-            self.edge_hits = 0
-        axis = "y" if vertical else "x"
-        self.axis_counts[axis] += 1
-        if self.axis is None:
-            cx, cy = self.axis_counts["x"], self.axis_counts["y"]
-            if cx + cy < AXIS_DECIDE_EVENTS and abs(cx - cy) < 2:
-                return  # not sure yet which way this swipe goes
-            self.axis = "x" if cx > cy else "y"
-        if axis != self.axis:
-            return
-        self.wheel_events += 1
-        forward = m.button in (WHEEL_DOWN, WHEEL_RIGHT)  # down / right = next
-        if axis == "y":
-            self.scroll_y(self.ch * 2 if forward else -self.ch * 2, wheel=True)
+        button = m.button
+        if m.shift and button in (WHEEL_UP, WHEEL_DOWN):  # Shift+wheel scrolls sideways
+            button = WHEEL_LEFT if button == WHEEL_UP else WHEEL_RIGHT
+        now = self.clock()
+        window = self.wheel_window
+        window.append((now, button))
+        while window and window[0][0] < now - SWIPE_WINDOW:
+            window.popleft()
+        rate = len(window)
+        counts = {}
+        for _, b in window:
+            counts[b] = counts.get(b, 0) + 1
+        main = max(counts, key=counts.get)
+        vertical = main in (WHEEL_UP, WHEEL_DOWN)
+        across = sum(n for b, n in counts.items() if (b in (WHEEL_UP, WHEEL_DOWN)) != vertical)
+
+        # re-arm once the burst has died down; track the lowest rate since then
+        if not self.swipe_armed and rate <= max(1, SWIPE_REARM * self.swipe_peak):
+            self.swipe_armed, self.swipe_valley = True, rate
+        if self.swipe_armed:
+            self.swipe_valley = min(self.swipe_valley, rate)
         else:
-            self.swipe_x(forward)
+            self.swipe_peak = max(self.swipe_peak, rate)
+
+        # scroll along the swipe's main axis when the page is larger than the view
+        if (button in (WHEEL_UP, WHEEL_DOWN)) == vertical:
+            step = 1 if button in (WHEEL_DOWN, WHEEL_RIGHT) else -1
+            if vertical:
+                self.sy += step * self.ch
+            else:
+                self.sx += step * self.cw
+            self.clamp()
+            self.dirty = True
+
+        forward = main in (WHEEL_DOWN, WHEEL_RIGHT)
+        W, H = self.page_px()
+        if vertical:
+            can_scroll = (forward and self.sy < H - self.vh - 1) or (not forward and self.sy > 1)
+        else:
+            can_scroll = (forward and self.sx < W - self.vw - 1) or (not forward and self.sx > 1)
+        rising = rate >= SWIPE_MIN_EVENTS and rate >= 2 * self.swipe_valley + SWIPE_MIN_EVENTS
+        straight = counts[main] >= 2 * across
+        self.trace(
+            f"b={button} rate={rate} main={main} armed={self.swipe_armed} "
+            f"valley={self.swipe_valley} peak={self.swipe_peak} scroll={can_scroll}"
+        )
+        if self.swipe_armed and rising and straight and not can_scroll:
+            self.swipe_armed, self.swipe_peak = False, rate
+            target = self.page + (1 if forward else -1)
+            if 0 <= target < len(self.doc):
+                self.trace(f"  turn -> page {target + 1}")
+                self.go(target, at_bottom=vertical and not forward)
 
     def scroll_x(self, dx):
         self.sx += dx
