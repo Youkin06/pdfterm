@@ -12,7 +12,7 @@ Ctrl+wheel, and click the toolbar buttons.
 ┌──────────────────────────────────────────────────────────────────┐
 │                         (the PDF page)                           │
 └──────────────────────────────────────────────────────────────────┘
- Double-click: zoom · q: quit
+ Double-click: zoom   q: quit
 ```
 
 ## Requirements
