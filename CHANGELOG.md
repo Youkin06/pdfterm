@@ -8,22 +8,18 @@
 - Automated tests (input parsing, file-type detection, swipes, zoom, tile budget, video
   detection, the command line) and GitHub Actions running them on macOS and Linux with
   Python 3.10 and 3.13.
+- Install with Homebrew: `brew install youkin06/tap/see` (tap: https://github.com/Youkin06/homebrew-tap).
 
 ### Changed
 - Python 3.10 or newer is required (3.9 has reached its end of life and is no longer
   available on current CI runners).
+- Files of an unsupported kind get a friendlier message that says what see can open:
+  `see: model.stl isn't a file see can show. It opens PDFs, images, animated GIFs, videos,
+  documents and text.`
 
 ### Fixed
 - In terminals without the kitty graphics protocol (e.g. macOS Terminal.app) see now says so
   and exits, instead of showing a blank or garbled screen. `SEE_FORCE_GRAPHICS=1` skips the check.
-
-### Added
-- Install with Homebrew: `brew install youkin06/tap/see` (tap: https://github.com/Youkin06/homebrew-tap).
-
-### Changed
-- Files of an unsupported kind get a friendlier message that says what see can open:
-  `see: model.stl isn't a file see can show. It opens PDFs, images, animated GIFs, videos,
-  documents and text.`
 
 ## 0.3.0 — 2026-11-10
 
