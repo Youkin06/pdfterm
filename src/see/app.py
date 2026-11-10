@@ -15,7 +15,7 @@ import unicodedata
 import zlib
 
 from . import __version__
-from .render import Image, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload, open_document
+from .render import Image, UnsupportedFile, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload, open_document
 from .term import (
     WHEEL_DOWN,
     WHEEL_LEFT,
@@ -883,7 +883,12 @@ def main(argv=None):
     term = Terminal()
     try:
         viewer = Viewer(args.file, term)
-    except Exception as e:  # unreadable or encrypted PDF
+    except UnsupportedFile:
+        parser.exit(1, (
+            f"see: {os.path.basename(args.file)} isn't a file see can show.\n"
+            "     It opens PDFs, images, animated GIFs, videos, documents and text.\n"
+        ))
+    except Exception as e:  # unreadable or encrypted PDF, broken file
         parser.exit(1, f"see: cannot open {args.file}: {e}\n")
     viewer.page = min(max(args.page - 1, 0), len(viewer.doc) - 1)
 

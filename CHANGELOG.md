@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Files of an unsupported kind get a friendlier message that says what see can open:
+  `see: model.stl isn't a file see can show. It opens PDFs, images, animated GIFs, videos,
+  documents and text.`
+
 ## 0.3.0 — 2026-11-10
 
 ### Added

@@ -33,6 +33,9 @@ double-click to zoom.
 | Animated GIF, APNG, animated WebP | ✅ Plays in a loop; click or Space to pause |
 | Video: MP4, MOV, MKV, WebM, AVI, … | ✅ Supported, with sound (needs [ffmpeg](https://ffmpeg.org)) |
 
+Anything else (for example 3D models) is refused with a short message that lists what see
+can open.
+
 ## Requirements
 
 - A terminal that supports the kitty graphics protocol, such as
@@ -251,6 +254,8 @@ MIT
 | HTML、SVG | ✅ Mac で対応（Mac 標準の WebKit で描画）。HTML は LibreOffice でも可 |
 | アニメーション（GIF、APNG、WebP） | ✅ くり返し再生。クリックか Space で一時停止 |
 | 動画（MP4、MOV、MKV、WebM、AVI など） | ✅ 対応・音声つき（ffmpeg が必要） |
+
+それ以外のファイル（3D モデルなど）は、「see で表示できるファイルではありません」という短いメッセージと、開ける種類の一覧を出して終わります。
 
 ### 必要なもの
 
