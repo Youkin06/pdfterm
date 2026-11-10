@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- Images: PNG, JPEG, WebP, AVIF, BMP, TIFF and anything else Pillow reads, plus HEIC/HEIF on
+  macOS (converted with `sips`). EXIF rotation is applied. Animated GIFs show their first frame.
+- The file type is detected from the content. Unsupported files get a clear error message.
+- For images the left drag moves the picture (there is no text to select), and the page
+  counter is hidden for single-page documents.
+
 ### Changed
 - Renamed from **pdfterm** to **see**: the command is `see`, the package `see-viewer`, the
   repository `Youkin06/see`, and the tuning variables `SEE_TRACE` / `SEE_DEBUG`.
