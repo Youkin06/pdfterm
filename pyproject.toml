@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdfterm"
+version = "0.1.0"
+description = "A mouse-friendly PDF viewer for terminals that support the kitty graphics protocol (Ghostty, kitty, WezTerm)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = ["pypdfium2>=4.0"]
+keywords = ["pdf", "viewer", "terminal", "kitty", "ghostty", "tui"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business",
+]
+
+[project.urls]
+Homepage = "https://github.com/Youkin06/pdfterm"
+
+[project.scripts]
+pdfterm = "pdfterm.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
