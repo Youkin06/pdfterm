@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Renamed from **pdfterm** to **see**: the command is `see`, the package `see-viewer`, the
+  repository `Youkin06/see`, and the tuning variables `SEE_TRACE` / `SEE_DEBUG`.
+
 ## 0.2.0 — 2026-11-10
 
 ### Added

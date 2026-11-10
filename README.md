@@ -1,10 +1,11 @@
-# pdfterm
+# see
 
-A mouse-friendly PDF viewer for the terminal. Pages are drawn as real images with the
+A mouse-friendly viewer for the terminal. It opens PDF files today; images and video are
+coming next. Pages are drawn as real images with the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/), and you use it
 like a GUI viewer: swipe to turn pages, drag to select and copy text, double-click to zoom.
 
-ターミナルの中で動く、マウスで操作できる PDF ビューアーです。（[日本語の説明](#日本語)）
+ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF に対応。画像と動画も対応予定）。（[日本語の説明](#日本語)）
 
 ```
  report.pdf   3/12   82%   Fit   Width                                  ✕
@@ -25,19 +26,22 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
 
 ## Install
 
+The command is `see`; the Python package is called `see-viewer` (the name `see` is taken on
+PyPI).
+
 ```sh
-pipx install git+https://github.com/Youkin06/pdfterm
+pipx install git+https://github.com/Youkin06/see
 # or
-uv tool install git+https://github.com/Youkin06/pdfterm
+uv tool install git+https://github.com/Youkin06/see
 ```
 
-Uninstall with `pipx uninstall pdfterm` (or `uv tool uninstall pdfterm`).
+Uninstall with `pipx uninstall see-viewer` (or `uv tool uninstall see-viewer`).
 
 ## Usage
 
 ```sh
-pdfterm file.pdf
-pdfterm file.pdf --page 5    # open at page 5
+see file.pdf
+see file.pdf --page 5    # open at page 5
 ```
 
 ### Screen
@@ -78,7 +82,7 @@ One swipe turns exactly one page, also when the trackpad's momentum keeps scroll
 | q | Quit |
 
 Copying uses `pbcopy` on a local Mac and the OSC 52 escape sequence elsewhere (for example
-over SSH). If your terminal sends Alt+C / Alt+A for Command+C / Command+A, pdfterm treats
+over SSH). If your terminal sends Alt+C / Alt+A for Command+C / Command+A, see treats
 them as copy and as "select the whole page".
 
 ### Limitations
@@ -108,17 +112,17 @@ them as copy and as "select the whole page".
 ## Development
 
 ```sh
-git clone https://github.com/Youkin06/pdfterm
-cd pdfterm
+git clone https://github.com/Youkin06/see
+cd see
 python3 -m venv .venv
 .venv/bin/pip install -e .
-.venv/bin/pdfterm some.pdf
+.venv/bin/see some.pdf
 ```
 
 Two environment variables help when tuning input and rendering:
 
-- `PDFTERM_TRACE=/path/to/log` logs every input event and the swipe decisions.
-- `PDFTERM_DEBUG=/path/to/log` writes the detected cell size, mouse mode, bytes sent and the
+- `SEE_TRACE=/path/to/log` logs every input event and the swipe decisions.
+- `SEE_DEBUG=/path/to/log` writes the detected cell size, mouse mode, bytes sent and the
   largest image on exit.
 
 See [CHANGELOG.md](CHANGELOG.md) for the history.
@@ -141,16 +145,16 @@ MIT
 ### インストール
 
 ```sh
-pipx install git+https://github.com/Youkin06/pdfterm
+pipx install git+https://github.com/Youkin06/see
 ```
 
-アンインストールは `pipx uninstall pdfterm` です。
+アンインストールは `pipx uninstall see-viewer` です。
 
 ### 使い方
 
 ```sh
-pdfterm ファイル.pdf
-pdfterm ファイル.pdf --page 5    # 5ページ目から開く
+see ファイル.pdf
+see ファイル.pdf --page 5    # 5ページ目から開く
 ```
 
 **画面**

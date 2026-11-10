@@ -1,4 +1,4 @@
-"""pdfterm: a mouse-friendly PDF viewer for terminals with the kitty graphics protocol."""
+"""see: a mouse-friendly viewer for terminals with the kitty graphics protocol."""
 
 import argparse
 import base64
@@ -195,7 +195,7 @@ class Viewer:
         self.z = 0
         self.pending = None  # request being rendered
         self.next_id = 1
-        self.largest_tile = 0  # pixels; reported by PDFTERM_DEBUG
+        self.largest_tile = 0  # pixels; reported by SEE_DEBUG
         self.renderer = Renderer(self.doc)
         self.chrome = ""  # last toolbar + status output, to skip redundant writes
         self.placed = b""
@@ -277,8 +277,8 @@ class Viewer:
         self.dirty = True
 
     def trace(self, text):
-        """Developer aid: with PDFTERM_TRACE=file, log input decisions there."""
-        path = os.environ.get("PDFTERM_TRACE")
+        """Developer aid: with SEE_TRACE=file, log input decisions there."""
+        path = os.environ.get("SEE_TRACE")
         if path:
             with open(path, "a") as f:
                 f.write(f"{time.time():.3f} {text}\n")
@@ -837,24 +837,24 @@ class Viewer:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="pdfterm",
+        prog="see",
         description="View PDFs in the terminal with mouse controls (kitty graphics protocol).",
     )
     parser.add_argument("file", help="PDF file to open")
     parser.add_argument("-p", "--page", type=int, default=1, help="page to open (1-based)")
-    parser.add_argument("--version", action="version", version=f"pdfterm {__version__}")
+    parser.add_argument("--version", action="version", version=f"see {__version__}")
     args = parser.parse_args(argv)
 
     if not os.path.isfile(args.file):
-        parser.exit(1, f"pdfterm: no such file: {args.file}\n")
+        parser.exit(1, f"see: no such file: {args.file}\n")
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        parser.exit(1, "pdfterm: must be run in a terminal\n")
+        parser.exit(1, "see: must be run in a terminal\n")
 
     term = Terminal()
     try:
         viewer = Viewer(args.file, term)
     except Exception as e:  # unreadable or encrypted PDF
-        parser.exit(1, f"pdfterm: cannot open {args.file}: {e}\n")
+        parser.exit(1, f"see: cannot open {args.file}: {e}\n")
     viewer.page = min(max(args.page - 1, 0), len(viewer.doc) - 1)
 
     term.enter()
@@ -864,7 +864,7 @@ def main(argv=None):
         pass
     finally:
         term.leave()
-        log = os.environ.get("PDFTERM_DEBUG")
+        log = os.environ.get("SEE_DEBUG")
         if log:  # developer aid: how the terminal was detected and how much was sent
             with open(log, "a") as f:
                 f.write(
