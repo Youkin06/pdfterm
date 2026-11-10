@@ -33,6 +33,9 @@ ZOOM_SETTLE = 0.15  # seconds without zoom input before re-rendering sharply
 # outer terminal as raw RGBA and drop anything over their per-frame budget (~30 MB in
 # herdr 0.9), so the image would silently disappear. 4M pixels is ~21 MB as base64 RGBA.
 TILE_MAX_PX = 4_000_000
+# Each new image costs a full raw transfer through herdr, so render about 1.6 screens'
+# worth around the view instead of everything allowed; edge prefetch covers the rest.
+TILE_VIEW_FACTOR = 1.6
 RETIRE_DELAY = 0.5  # seconds an old image stays under the new one
 
 TEXT = {
@@ -112,7 +115,7 @@ class Renderer(threading.Thread):
         self.request = None
         self.result = None
         self.prefetch = []  # requests to render while idle
-        self.cache = {}  # req -> (png, w, h), oldest first
+        self.cache = {}  # req -> (Image, w, h), oldest first
 
     def submit(self, req, prefetch=()):
         with self.cond:
@@ -388,16 +391,22 @@ class Viewer:
         scale = min(1.0, math.sqrt(TILE_MAX_PX * 0.9 / (self.vw * self.vh)))
         return self.zoom * scale
 
+    def tile_budget(self, tz):
+        """Most pixels one tile at zoom `tz` should have."""
+        k = tz / self.zoom
+        return min(TILE_MAX_PX, TILE_VIEW_FACTOR * self.vw * self.vh * k * k)
+
     def wanted_tile(self, tz):
-        """The page region worth rendering at zoom `tz`, within TILE_MAX_PX pixels."""
+        """The page region worth rendering at zoom `tz`, within the tile budget."""
         W, H = self.page_px(tz)
-        if W * H <= TILE_MAX_PX:
+        budget = self.tile_budget(tz)
+        if W * H <= budget:
             return 0, 0, int(W), int(H)  # small enough: render the whole page
         # otherwise the view plus as much margin as the pixel budget allows
         k = tz / self.zoom
         vx, vy, vw, vh = self.sx * k, self.sy * k, self.vw * k, self.vh * k
         b = vw + vh
-        margin = max(0.0, (-b + math.sqrt(b * b - 4 * (vw * vh - TILE_MAX_PX))) / 4)
+        margin = max(0.0, (-b + math.sqrt(max(0.0, b * b - 4 * (vw * vh - budget)))) / 4)
         x0, y0 = max(0, int(vx - margin)), max(0, int(vy - margin))
         x1, y1 = min(int(W), int(vx + vw + margin)), min(int(H), int(vy + vh + margin))
         return x0, y0, x1 - x0, y1 - y0
@@ -419,7 +428,10 @@ class Viewer:
         t = self.tile
         k = t.zoom / self.zoom
         W, H = self.page_px(t.zoom)
-        pad_x, pad_y = self.vw * k / 4, self.vh * k / 4
+        # trigger at half of the margin the tile was rendered with; a fresh tile centred on
+        # the view must not count as "near the edge", or it would re-render forever
+        pad_x = max(0.0, t.w - self.vw * k) / 4
+        pad_y = max(0.0, t.h - self.vh * k) / 4
         vx0, vy0 = self.sx * k, self.sy * k
         vx1, vy1 = vx0 + self.vw * k, vy0 + self.vh * k
         return (
@@ -458,7 +470,7 @@ class Viewer:
                     z = self.zoom
                 z *= tz / self.zoom
                 W, H = pw * z, ph * z
-                if W * H <= TILE_MAX_PX:
+                if W * H <= self.tile_budget(z):
                     out.append((p, z, 0, 0, int(W), int(H)))
         return out
 
@@ -466,7 +478,7 @@ class Viewer:
         res = self.renderer.take()
         if res is None:
             return
-        req, png, w, h = res
+        req, image, w, h = res
         if req != self.pending:
             return  # superseded by a newer request
         self.pending = None
@@ -476,7 +488,7 @@ class Viewer:
         self.z += 1
         self.tile = Tile(image_id, req[0], req[1], req[2], req[3], w, h, self.z)
         self.largest_tile = max(self.largest_tile, w * h)
-        self.term.write(kitty_upload(png, image_id))
+        self.term.write(kitty_upload(image, image_id))
         self.placed = b""
         if self.place():
             if old is not None:

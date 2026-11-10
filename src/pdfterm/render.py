@@ -1,7 +1,6 @@
 """PDF rendering (via PDFium) and image output (kitty graphics protocol)."""
 
 import base64
-import struct
 import threading
 import zlib
 
@@ -30,7 +29,7 @@ class Document:
         """Render the w x h pixel region at (x, y) of page `index` scaled by `zoom`.
 
         Coordinates are page pixels at that zoom (pixels per PDF point).
-        Returns (png_bytes, width, height) of what was actually rendered.
+        Returns (Image, width, height) of what was actually rendered.
         """
         pw, ph = self.page_size(index)
         W, H = pw * zoom, ph * zoom
@@ -41,38 +40,40 @@ class Document:
             )
             buf = bytes(bitmap.buffer)
             bw, bh, stride, ch = bitmap.width, bitmap.height, bitmap.stride, bitmap.n_channels
-        return encode_png(buf, bw, bh, stride, ch), bw, bh
+        return Image.from_rows(buf, bw, bh, stride, ch), bw, bh
 
 
-def encode_png(buf, width, height, stride, channels):
-    """Minimal PNG encoder for 8-bit RGB/RGBA rows (no external dependencies)."""
-    row_len = width * channels
-    raw = b"".join(
-        b"\x00" + buf[y * stride : y * stride + row_len] for y in range(height)
-    )
+class Image:
+    """Pixels ready to send: zlib-compressed raw RGB(A).
 
-    def chunk(tag, data):
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+    Raw pixels rather than PNG because multiplexers like herdr decode images and send
+    them on uncompressed; plain RGB keeps that at 3 bytes per pixel instead of 4.
+    """
 
-    color_type = 6 if channels == 4 else 2
-    header = struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", header)
-        + chunk(b"IDAT", zlib.compress(raw, 1))
-        + chunk(b"IEND", b"")
-    )
+    def __init__(self, data, width, height, channels):
+        self.data, self.width, self.height, self.channels = data, width, height, channels
+
+    @classmethod
+    def from_rows(cls, buf, width, height, stride, channels):
+        row = width * channels
+        if stride == row:
+            packed = buf[: row * height]
+        else:
+            packed = b"".join(buf[y * stride : y * stride + row] for y in range(height))
+        return cls(zlib.compress(packed, 1), width, height, channels)
 
 
-def kitty_upload(png, image_id):
-    """Transmit an image to the terminal without displaying it."""
-    data = base64.standard_b64encode(png)
+def kitty_upload(image, image_id):
+    """Transmit an Image to the terminal without displaying it."""
+    data = base64.standard_b64encode(image.data)
+    fmt = 32 if image.channels == 4 else 24
+    first = f"a=t,f={fmt},s={image.width},v={image.height},o=z,i={image_id},q=2"
     out = []
     step = 4096
     for pos in range(0, len(data), step):
         part = data[pos : pos + step]
         more = 1 if pos + step < len(data) else 0
-        head = f"a=t,f=100,i={image_id},q=2,m={more}" if pos == 0 else f"m={more}"
+        head = f"{first},m={more}" if pos == 0 else f"m={more}"
         out.append(b"\x1b_G" + head.encode() + b";" + part + b"\x1b\\")
     return b"".join(out)
 
