@@ -1,11 +1,11 @@
 # see
 
-A mouse-friendly viewer for the terminal. It opens PDF files and images, and plays animated
-GIF, PNG and WebP; video is coming next. Everything is drawn as real images with the
+A mouse-friendly viewer for the terminal. It opens PDFs, images, Office documents, text and
+code, and plays animated GIF, PNG and WebP; video is coming next. Everything is drawn as real images with the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/), and you use it
 like a GUI viewer: swipe to turn pages, drag to select and copy text, double-click to zoom.
 
-ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF、画像、GIF などのアニメーションに対応。動画も対応予定）。（[日本語の説明](#日本語)）
+ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF、画像、Office 文書、テキスト、GIF などのアニメーションに対応。動画も対応予定）。（[日本語の説明](#日本語)）
 
 ```
  report.pdf   3/12   82%   Fit   Width                                  ✕
@@ -24,6 +24,11 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
 | PDF | ✅ Supported |
 | Images: PNG, JPEG, WebP, AVIF, BMP, TIFF, … | ✅ Supported (anything [Pillow](https://python-pillow.org) reads) |
 | iPhone photos (HEIC / HEIF) | ✅ On macOS (converted with the built-in `sips`) |
+| Text, Markdown, source code, logs, JSON | ✅ As pages in a monospace font, Japanese included; text can be selected |
+| CSV / TSV | ✅ As a table |
+| Word, RTF, OpenDocument text (.docx, .doc, .rtf, .odt) | ✅ With LibreOffice, or on macOS with the built-in text system (simpler layout) |
+| Excel, PowerPoint, Keynote, Numbers, Pages (.xlsx, .xls, .pptx, .ppt, .key, …) | ✅ With LibreOffice, or on macOS from the Quick Look preview |
+| HTML, SVG | ✅ On macOS (drawn by the built-in WebKit); HTML also with LibreOffice |
 | Animated GIF, APNG, animated WebP | ✅ Plays in a loop; click or Space to pause |
 | Video (MP4, MOV, …) | Planned (a 30 fps prototype runs smoothly) |
 
@@ -33,6 +38,9 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
   [Ghostty](https://ghostty.org), [kitty](https://sw.kovidgoyal.net/kitty/) or
   [WezTerm](https://wezterm.org). It also works inside [herdr](https://herdr.dev) panes.
 - Python 3.9 or newer
+- Optional: [LibreOffice](https://www.libreoffice.org) for the most faithful Office documents
+  (and to open them at all outside macOS). see finds `soffice` on the `PATH` or in
+  `/Applications/LibreOffice.app`.
 
 ## Install
 
@@ -53,7 +61,13 @@ Uninstall with `pipx uninstall see-viewer` (or `uv tool uninstall see-viewer`).
 see file.pdf
 see file.pdf --page 5    # open at page 5
 see photo.png
+see report.docx          # documents and text files open as pages
+see notes.md
 ```
+
+Documents and text files are converted to PDF first. That takes a moment the first time
+(`see: converting …` is shown meanwhile); the result is cached, so opening the file again is
+instant until it changes.
 
 ### Screen
 
@@ -109,6 +123,20 @@ them as copy and as "select the whole page".
   large animations that do not fit the frame budget (see below) are rendered frame by
   frame, which is slower, especially inside herdr. When the zoom enlarges an animation
   beyond what fits, its frames are rendered a little smaller and stretched by the terminal.
+- **Office documents without LibreOffice** (macOS): Word, RTF and OpenDocument text go
+  through the macOS text system, which keeps text, fonts and tables but simplifies the
+  layout (headers, footers, columns and text boxes may be lost). Excel, PowerPoint and iWork
+  files show Quick Look's preview: slides and sheets are close to the original, though some
+  formatting and effects can be missing. If even
+  that fails, a Quick Look thumbnail of the first page is shown, with a note. Install
+  LibreOffice for full fidelity.
+- **Text files** are laid out in Menlo, 9 pt, on A4 pages and wrapped at the page width;
+  only the first 2 million characters are shown. Long single-line JSON is pretty-printed.
+  Outside macOS a simpler built-in layout is used, which needs a font such as IPAGothic or
+  DejaVu Sans Mono for non-Latin text.
+- **SVG** is drawn by WebKit as a picture on a page the size of the drawing; scripts,
+  animations and external files referenced by the SVG are not loaded. HTML pages are
+  printed as WebKit would print them.
 - **Pinch to zoom** is not possible: terminals do not pass pinch gestures to programs. Use a
   double-click, Ctrl + wheel or the + / − keys.
 - Inside a multiplexer such as herdr, every new page image is passed on to the outer
@@ -121,6 +149,13 @@ them as copy and as "select the whole page".
   [pypdfium2](https://github.com/pypdfium2-team/pypdfium2)) at the current zoom level, so
   zoomed-in text stays sharp. Images are read with [Pillow](https://python-pillow.org) and
   only the visible part is scaled. The file type is detected from the content, not the name.
+- Other files are turned into a PDF and then shown like one (`src/see/convert.py`):
+  LibreOffice (`soffice --headless --convert-to pdf`) when installed; otherwise on macOS
+  Cocoa's document readers and text layout, and WebKit printing of HTML, SVG and the HTML
+  that Quick Look (`qlmanage -p`) makes for Office and iWork files (Keynote previews are
+  PDFs already and are joined directly). Text outside macOS is written to a PDF with PDFium.
+  Results are cached in the temp directory, keyed by path, size and modification time.
+  Every conversion runs with a timeout.
 - Each rendered region is uploaded to the terminal once. Scrolling and dragging only change
   which part of it is shown, so they send a few bytes instead of a new image. Zooming
   stretches the current image at once and renders a sharp one when the wheel stops.
@@ -172,6 +207,11 @@ MIT
 | PDF | ✅ 対応 |
 | 画像（PNG、JPEG、WebP、AVIF、BMP、TIFF など） | ✅ 対応（Pillow で読めるもの） |
 | iPhone の写真（HEIC / HEIF） | ✅ Mac で対応（Mac 標準の `sips` で変換） |
+| テキスト、Markdown、ソースコード、ログ、JSON | ✅ 等幅フォントのページとして表示（日本語も可）。文字を選択できます |
+| CSV / TSV | ✅ 表として表示 |
+| Word、RTF、OpenDocument 文書（.docx、.doc、.rtf、.odt） | ✅ LibreOffice があればそれで、なければ Mac 標準の機能で表示（レイアウトは簡略化） |
+| Excel、PowerPoint、Keynote、Numbers、Pages（.xlsx、.xls、.pptx、.ppt、.key など） | ✅ LibreOffice があればそれで、なければ Mac の Quick Look のプレビューで表示 |
+| HTML、SVG | ✅ Mac で対応（Mac 標準の WebKit で描画）。HTML は LibreOffice でも可 |
 | アニメーション（GIF、APNG、WebP） | ✅ くり返し再生。クリックか Space で一時停止 |
 | 動画（MP4、MOV など） | 対応予定（30fps の試作はなめらかに動作） |
 
@@ -179,6 +219,7 @@ MIT
 
 - kitty 画像方式に対応したターミナル（Ghostty、kitty、WezTerm など）。herdr のペインの中でも使えます。
 - Python 3.9 以上
+- （任意）LibreOffice：Office 文書をいちばん忠実に表示できます。Mac 以外で Office 文書を開くには必要です。
 
 ### インストール
 
@@ -194,7 +235,11 @@ pipx install git+https://github.com/Youkin06/see
 see ファイル.pdf
 see ファイル.pdf --page 5    # 5ページ目から開く
 see 写真.png
+see 資料.docx            # 文書やテキストもページとして開けます
+see メモ.md
 ```
+
+文書やテキストは、いったん PDF に変換してから表示します。初回は少し時間がかかります（その間 `see: converting …` と表示）。変換結果は保存しておくので、ファイルが変わらない限り、2回目からはすぐに開きます。
 
 **画面**
 
@@ -240,5 +285,8 @@ see 写真.png
 - **スキャンした PDF**：中身が文字ではなく写真なので、文字を選べません。
 - **画像の倍率**：画像の1画素が画面の1画素になる大きさが 100% です。小さい画像を大きく拡大したときは、ドット絵やアイコンがぼやけないよう、画素の角を残して拡大します。
 - **アニメーション**：ずっとくり返します（ファイルの再生回数は使いません）。コマごとの表示時間を守り、10ms 以下のコマはブラウザと同じく 100ms にします。全コマを一度に送れないほど長い・大きいアニメーションは1コマずつ描いて送るため、特に herdr の中では遅くなります。拡大しすぎて入りきらないときは、少し小さく描いてターミナルに引き伸ばしてもらいます。
+- **LibreOffice がないときの Office 文書**（Mac）：Word・RTF・OpenDocument 文書は Mac の文字表示機能で読むため、文字や表は出ますが、ヘッダー・段組み・テキストボックスなどのレイアウトは崩れることがあります。Excel・PowerPoint・iWork のファイルは Quick Look のプレビューを使うので、元に近いものの、一部の書式や効果が出ないことがあります。それもできないときは、1ページ目の縮小画像だけを表示します（そのことを表示します）。
+- **テキスト**：Menlo 9pt で A4 のページに並べ、ページの幅で折り返します。表示するのは最初の200万文字までです。1行に詰まった JSON は整形して表示します。
+- **SVG**：図の大きさのページに、画像として描きます。スクリプト・アニメーション・外部ファイルの参照は読み込みません。
 - **ピンチでのズーム**：ターミナルはピンチ操作をアプリに渡さないため使えません。ダブルクリック、Ctrl + ホイール、+ / − キーを使ってください。
 - herdr などの中では、新しいページの画像を外側のターミナルに渡すのに少し時間がかかります。スクロールやドラッグは送ってある画像を動かすだけで、前後のページも先に用意しているので、待ち時間を感じるのは主にズームのときです。

@@ -12,6 +12,8 @@ import pypdfium2 as pdfium
 from PIL import Image as PILImage
 from PIL import ImageOps
 
+from .convert import convert
+
 # Images are measured in "points" like PDF pages, at 96 pixels per inch, so that a
 # zoom level of 100% shows every image pixel as one screen pixel.
 IMAGE_PT_PER_PX = 72 / 96
@@ -25,7 +27,14 @@ def open_document(path):
         return Document(path)
     from .anim import open_animated  # animated GIF, APNG and WebP
 
-    return open_animated(path) or ImageDocument(path)
+    animated = open_animated(path)
+    if animated:
+        return animated
+    # documents, text and SVG are converted to a PDF first (see convert.py)
+    converted = convert(path, head)
+    if converted:
+        return Document(converted) if converted.endswith(".pdf") else ImageDocument(converted)
+    return ImageDocument(path)
 
 
 class Document:
