@@ -15,7 +15,7 @@ import unicodedata
 import zlib
 
 from . import __version__
-from .render import Document, Image, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload
+from .render import Image, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload, open_document
 from .term import (
     WHEEL_DOWN,
     WHEEL_LEFT,
@@ -169,7 +169,7 @@ class Viewer:
     def __init__(self, path, term):
         self.path = path
         self.term = term
-        self.doc = Document(path)
+        self.doc = open_document(path)
         self.page = 0
         self.mode = "fit"  # "fit", "width" or "custom"
         self.zoom = 1.0
@@ -177,7 +177,8 @@ class Viewer:
         self.buttons = []  # (x0, x1, action) on the toolbar row
         self.message = ""
         self.message_until = 0.0
-        self.tool = "select"  # left drag: "select" text or "hand" (move the page)
+        # left drag: "select" text, or "hand" to move the page (pictures have no text)
+        self.tool = "select" if self.doc.has_text else "hand"
         self.drag = None  # (px, py, sx, sy, moved) while moving the page
         self.selecting = None  # (px, py, anchor_char, moved) while selecting text
         self.sel = None  # (page, first_char, last_char)
@@ -731,7 +732,7 @@ class Viewer:
 
     def toolbar(self):
         pct = round(self.zoom * 72 / 96 * 100)  # 100% = 96 dpi on screen
-        page = (f" {self.page + 1}/{len(self.doc)} ", None)
+        page = (f" {self.page + 1}/{len(self.doc)} ", None) if len(self.doc) > 1 else None
         level = (f" {pct}% ", None)
         fit = (" Fit ", lambda: self.set_mode("fit"), "fit")
         wide = (" Width ", lambda: self.set_mode("width"), "width")
@@ -748,6 +749,7 @@ class Viewer:
             [page],
             [],
         ]
+        layouts = [[i for i in items if i] for items in layouts]
         for items in layouts:
             rest = sum(width(i[0]) + 1 for i in items) + width(close)
             if 1 + name_min + 2 + rest <= self.cols:
@@ -838,9 +840,9 @@ class Viewer:
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="see",
-        description="View PDFs in the terminal with mouse controls (kitty graphics protocol).",
+        description="View PDFs and images in the terminal with mouse controls (kitty graphics protocol).",
     )
-    parser.add_argument("file", help="PDF file to open")
+    parser.add_argument("file", help="PDF or image file to open")
     parser.add_argument("-p", "--page", type=int, default=1, help="page to open (1-based)")
     parser.add_argument("--version", action="version", version=f"see {__version__}")
     args = parser.parse_args(argv)

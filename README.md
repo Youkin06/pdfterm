@@ -1,11 +1,11 @@
 # see
 
-A mouse-friendly viewer for the terminal. It opens PDF files today; images and video are
-coming next. Pages are drawn as real images with the
+A mouse-friendly viewer for the terminal. It opens PDF files and images today; animated GIFs
+and video are coming next. Everything is drawn as real images with the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/), and you use it
 like a GUI viewer: swipe to turn pages, drag to select and copy text, double-click to zoom.
 
-ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF に対応。画像と動画も対応予定）。（[日本語の説明](#日本語)）
+ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF と画像に対応。GIF アニメと動画も対応予定）。（[日本語の説明](#日本語)）
 
 ```
  report.pdf   3/12   82%   Fit   Width                                  ✕
@@ -22,8 +22,9 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
 | Kind | Status |
 |---|---|
 | PDF | ✅ Supported |
-| Images (PNG, JPEG, WebP, HEIC, …) | Planned |
-| Animated GIF | Planned |
+| Images: PNG, JPEG, WebP, AVIF, BMP, TIFF, … | ✅ Supported (anything [Pillow](https://python-pillow.org) reads) |
+| iPhone photos (HEIC / HEIF) | ✅ On macOS (converted with the built-in `sips`) |
+| Animated GIF | Shows the first frame; animation is planned |
 | Video (MP4, MOV, …) | Planned (a 30 fps prototype runs smoothly) |
 
 ## Requirements
@@ -51,11 +52,12 @@ Uninstall with `pipx uninstall see-viewer` (or `uv tool uninstall see-viewer`).
 ```sh
 see file.pdf
 see file.pdf --page 5    # open at page 5
+see photo.png
 ```
 
 ### Screen
 
-- **Top bar:** file name, current page / page count, zoom level, **Fit** (whole page),
+- **Top bar:** file name, current page / page count (PDFs with more than one page), zoom level, **Fit** (whole page),
   **Width** (fit the page width) and **✕** (quit). The active mode is underlined. In narrow
   windows the less important parts are hidden.
 - **Bottom line:** `Double-click: zoom   q: quit`, and short messages such as
@@ -67,7 +69,7 @@ see file.pdf --page 5    # open at page 5
 |---|---|
 | Swipe right → left / left → right | Next / previous page |
 | Swipe or wheel up / down | Scroll the page; turns one page at the top or bottom, or when the whole page is visible |
-| Drag | Select text; it is copied to the clipboard when you release |
+| Drag | PDFs: select text; it is copied to the clipboard when you release. Images: move the picture |
 | Double-click | Zoom in 2× at that spot / back to the whole page |
 | Ctrl + wheel | Zoom in or out around the pointer |
 | Right or middle drag | Move a zoomed page around |
@@ -97,6 +99,8 @@ them as copy and as "select the whole page".
 ### Limitations
 
 - **Scanned PDFs** contain pictures of text, not text, so nothing can be selected on them.
+- **Images** are shown at 100% when one image pixel is one screen pixel; enlarging a small
+  image a lot keeps hard pixel edges (good for pixel art and icons).
 - **Pinch to zoom** is not possible: terminals do not pass pinch gestures to programs. Use a
   double-click, Ctrl + wheel or the + / − keys.
 - Inside a multiplexer such as herdr, every new page image is passed on to the outer
@@ -105,9 +109,10 @@ them as copy and as "select the whole page".
 
 ## How it works
 
-- Pages are rendered with [PDFium](https://pdfium.googlesource.com/pdfium/) (through
+- PDF pages are rendered with [PDFium](https://pdfium.googlesource.com/pdfium/) (through
   [pypdfium2](https://github.com/pypdfium2-team/pypdfium2)) at the current zoom level, so
-  zoomed-in text stays sharp.
+  zoomed-in text stays sharp. Images are read with [Pillow](https://python-pillow.org) and
+  only the visible part is scaled. The file type is detected from the content, not the name.
 - Each rendered region is uploaded to the terminal once. Scrolling and dragging only change
   which part of it is shown, so they send a few bytes instead of a new image. Zooming
   stretches the current image at once and renders a sharp one when the wheel stops.
@@ -151,8 +156,9 @@ MIT
 | 種類 | 状態 |
 |---|---|
 | PDF | ✅ 対応 |
-| 画像（PNG、JPEG、WebP、HEIC など） | 対応予定 |
-| GIF アニメ | 対応予定 |
+| 画像（PNG、JPEG、WebP、AVIF、BMP、TIFF など） | ✅ 対応（Pillow で読めるもの） |
+| iPhone の写真（HEIC / HEIF） | ✅ Mac で対応（Mac 標準の `sips` で変換） |
+| GIF アニメ | 最初のコマだけ表示。アニメーションは対応予定 |
 | 動画（MP4、MOV など） | 対応予定（30fps の試作はなめらかに動作） |
 
 ### 必要なもの
@@ -173,11 +179,12 @@ pipx install git+https://github.com/Youkin06/see
 ```sh
 see ファイル.pdf
 see ファイル.pdf --page 5    # 5ページ目から開く
+see 写真.png
 ```
 
 **画面**
 
-- 上の行：ファイル名、ページ（今のページ / 全ページ数）、倍率、**Fit**（ページ全体）、**Width**（幅に合わせる）、**✕**（終了）。今のモードには下線が付きます。ウィンドウが狭いときは、重要度の低いものから省きます。
+- 上の行：ファイル名、ページ（今のページ / 全ページ数。2ページ以上の PDF のみ）、倍率、**Fit**（ページ全体）、**Width**（幅に合わせる）、**✕**（終了）。今のモードには下線が付きます。ウィンドウが狭いときは、重要度の低いものから省きます。
 - 下の行：`Double-click: zoom   q: quit` と、「Copied 34 characters」のような短いお知らせ。
 
 **マウス・トラックパッド**
@@ -186,7 +193,7 @@ see ファイル.pdf --page 5    # 5ページ目から開く
 |---|---|
 | 右→左 / 左→右にスワイプ | 次 / 前のページ |
 | 上下にスワイプ、ホイール | スクロール（ページの端や、ページ全体が見えているときは1ページめくる） |
-| ドラッグ | 文字を選択（離すと自動でコピー） |
+| ドラッグ | PDF：文字を選択（離すと自動でコピー）。画像：画像を動かす |
 | ダブルクリック | その場所を2倍に拡大 / ページ全体に戻す |
 | Ctrl + ホイール | マウスの位置を中心にズーム |
 | 右ドラッグ | 拡大したページを動かす |
@@ -214,5 +221,6 @@ see ファイル.pdf --page 5    # 5ページ目から開く
 **できないこと**
 
 - **スキャンした PDF**：中身が文字ではなく写真なので、文字を選べません。
+- **画像の倍率**：画像の1画素が画面の1画素になる大きさが 100% です。小さい画像を大きく拡大したときは、ドット絵やアイコンがぼやけないよう、画素の角を残して拡大します。
 - **ピンチでのズーム**：ターミナルはピンチ操作をアプリに渡さないため使えません。ダブルクリック、Ctrl + ホイール、+ / − キーを使ってください。
 - herdr などの中では、新しいページの画像を外側のターミナルに渡すのに少し時間がかかります。スクロールやドラッグは送ってある画像を動かすだけで、前後のページも先に用意しているので、待ち時間を感じるのは主にズームのときです。

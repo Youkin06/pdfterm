@@ -1,14 +1,35 @@
-"""PDF rendering (via PDFium) and image output (kitty graphics protocol)."""
+"""Document loading (PDF via PDFium, images via Pillow) and output (kitty graphics protocol)."""
 
 import base64
+import os
+import subprocess
+import sys
+import tempfile
 import threading
 import zlib
 
 import pypdfium2 as pdfium
+from PIL import Image as PILImage
+from PIL import ImageOps
+
+# Images are measured in "points" like PDF pages, at 96 pixels per inch, so that a
+# zoom level of 100% shows every image pixel as one screen pixel.
+IMAGE_PT_PER_PX = 72 / 96
+
+
+def open_document(path):
+    """Open a PDF or an image, deciding by the file's content rather than its name."""
+    with open(path, "rb") as f:
+        head = f.read(1024)
+    if b"%PDF-" in head:
+        return Document(path)
+    return ImageDocument(path)
 
 
 class Document:
     """A PDF opened with PDFium. PDFium is not thread-safe, so every call takes `lock`."""
+
+    has_text = True
 
     def __init__(self, path):
         self.pdf = pdfium.PdfDocument(path)
@@ -73,6 +94,80 @@ class Document:
             buf = bytes(bitmap.buffer)
             bw, bh, stride, ch = bitmap.width, bitmap.height, bitmap.stride, bitmap.n_channels
         return Image.from_rows(buf, bw, bh, stride, ch), bw, bh
+
+
+class ImageDocument:
+    """A picture shown as a one-page document, with the same interface as Document."""
+
+    has_text = False
+
+    def __init__(self, path):
+        self.lock = threading.Lock()
+        img = _load_image(path)
+        img = ImageOps.exif_transpose(img)  # phone photos store their rotation separately
+        if img.mode not in ("RGB", "RGBA"):
+            img = img.convert("RGBA" if "transparency" in img.info or img.mode in ("LA", "PA") else "RGB")
+        self.img = img
+
+    def __len__(self):
+        return 1
+
+    def page_size(self, index):
+        w, h = self.img.size
+        return w * IMAGE_PT_PER_PX, h * IMAGE_PT_PER_PX
+
+    def render_tile(self, index, zoom, x, y, w, h):
+        scale = zoom * IMAGE_PT_PER_PX  # screen pixels per image pixel
+        iw, ih = self.img.size
+        w = max(1, min(w, int(iw * scale) - x))
+        h = max(1, min(h, int(ih * scale) - y))
+        box = (x / scale, y / scale, (x + w) / scale, (y + h) / scale)
+        # enlarging small images (pixel art, icons) a lot stays crisp with nearest-neighbour
+        resample = PILImage.NEAREST if scale >= 4 else (
+            PILImage.LANCZOS if scale < 1 else PILImage.BICUBIC
+        )
+        with self.lock:
+            tile = self.img.resize((w, h), resample=resample, box=box)
+        ch = 4 if tile.mode == "RGBA" else 3
+        return Image.from_rows(tile.tobytes(), w, h, w * ch, ch), w, h
+
+    # no text layer
+    def char_count(self, index):
+        return 0
+
+    def char_at(self, index, x, y, tolerance):
+        return None
+
+    def text(self, index, first, last):
+        return ""
+
+    def text_rects(self, index, first, last):
+        return []
+
+
+def _load_image(path):
+    try:
+        img = PILImage.open(path)
+        img.load()
+        return img
+    except Exception:
+        # HEIC/HEIF (iPhone photos) are not readable by Pillow; macOS can convert them
+        if sys.platform == "darwin":
+            fd, tmp = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            try:
+                subprocess.run(
+                    ["sips", "-s", "format", "png", path, "--out", tmp],
+                    capture_output=True, check=True, timeout=30,
+                )
+                img = PILImage.open(tmp)
+                img.load()
+                return img
+            except Exception:
+                pass
+            finally:
+                os.unlink(tmp)
+        raise ValueError("not a PDF or a supported image")
 
 
 class Image:
