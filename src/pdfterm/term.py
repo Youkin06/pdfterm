@@ -29,10 +29,18 @@ class Mouse:
     x: int  # 1-based cell column
     y: int  # 1-based cell row
     pressed: bool
+    px: float = 0.0  # pointer position in window pixels (cell centre when unknown)
+    py: float = 0.0
     shift: bool = False
     alt: bool = False
     ctrl: bool = False
     motion: bool = False
+
+
+@dataclass
+class ModeReport:
+    mode: int
+    value: int  # 1 set, 2 reset, 0 unknown
 
 
 @dataclass
@@ -48,6 +56,9 @@ class Terminal:
         self._saved = None
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
         self._buf = ""
+        self.pixel_mouse = False
+        self.cell = (8, 16)
+        self.bytes_written = 0
 
     # --- setup / teardown -------------------------------------------------
 
@@ -56,17 +67,26 @@ class Terminal:
         tty.setraw(self.fd_in)
         # alternate screen, hide cursor, mouse: buttons + drag motion, SGR encoding
         self.write("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[2J")
+        # SGR-pixels mouse mode (1016) gives smooth dragging; ask whether it is supported
+        self.write("\x1b[?1016h\x1b[?1016$p")
+        deadline = time.time() + 0.3
+        while time.time() < deadline:
+            evs = self.read_events(timeout=deadline - time.time())
+            if any(isinstance(e, ModeReport) and e.mode == 1016 for e in evs):
+                self.pixel_mouse = any(e.value == 1 for e in evs if isinstance(e, ModeReport))
+                break
 
     def leave(self):
         self.write(
             "\x1b_Ga=d,d=A,q=2\x1b\\"  # delete all kitty images
-            "\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?25h\x1b[?1049l"
+            "\x1b[?1016l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?25h\x1b[?1049l"
         )
         if self._saved is not None:
             termios.tcsetattr(self.fd_in, termios.TCSADRAIN, self._saved)
 
     def write(self, s):
         data = s.encode() if isinstance(s, str) else s
+        self.bytes_written += len(data)
         view = memoryview(data)
         while view:
             try:
@@ -89,7 +109,8 @@ class Terminal:
                 ypix, xpix = px.height, px.width
         if not xpix or not ypix:
             xpix, ypix = cols * 8, rows * 16  # last resort guess
-        return rows, cols, max(1, xpix // max(1, cols)), max(1, ypix // max(1, rows))
+        self.cell = (max(1, xpix // max(1, cols)), max(1, ypix // max(1, rows)))
+        return rows, cols, self.cell[0], self.cell[1]
 
     def _query_window_pixels(self):
         self.write("\x1b[14t")
@@ -117,6 +138,14 @@ class Terminal:
                 break
         self._buf += self._decoder.decode(b"".join(chunks))
         events, self._buf = parse(self._buf)
+        cw, ch = self.cell
+        for ev in events:
+            if isinstance(ev, Mouse):
+                if self.pixel_mouse:  # coordinates are pixels; derive the cell
+                    ev.px, ev.py = ev.x - 1, ev.y - 1
+                    ev.x, ev.y = int(ev.px // cw) + 1, int(ev.py // ch) + 1
+                else:
+                    ev.px, ev.py = (ev.x - 0.5) * cw, (ev.y - 0.5) * ch
         return events
 
 
@@ -194,6 +223,12 @@ def _parse_csi(body, final):
             ctrl=bool(b & CTRL),
             motion=bool(b & MOTION),
         )
+    if final == "y" and body.startswith("?") and body.endswith("$"):
+        try:
+            mode, value = (int(v) for v in body[1:-1].split(";"))
+        except ValueError:
+            return None
+        return ModeReport(mode, value)
     if final == "t":
         parts = body.split(";")
         if len(parts) == 3 and parts[0] == "4":

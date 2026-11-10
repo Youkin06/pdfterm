@@ -5,11 +5,12 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 
 from . import __version__
-from .render import Document, encode_png, kitty_delete, kitty_image
+from .render import Document, kitty_delete, kitty_place, kitty_upload
 from .term import (
     WHEEL_DOWN,
     WHEEL_LEFT,
@@ -26,6 +27,7 @@ ZOOM_MAX = 16.0  # pixels per point
 DOUBLE_CLICK = 0.4
 FLIP_COOLDOWN = 0.3
 EDGE_HITS_TO_FLIP = 3
+ZOOM_SETTLE = 0.15  # seconds without zoom input before re-rendering sharply
 
 TEXT = {
     "en": {
@@ -80,6 +82,49 @@ def clip(s, w):
     return out
 
 
+class Tile:
+    """A rendered region of one page, uploaded to the terminal as an image."""
+
+    def __init__(self, image_id, page, zoom, x, y, w, h):
+        self.image_id, self.page, self.zoom = image_id, page, zoom
+        self.x, self.y, self.w, self.h = x, y, w, h  # page pixels at self.zoom
+
+
+class Renderer(threading.Thread):
+    """Renders tiles in the background so input handling never waits for PDFium."""
+
+    def __init__(self, doc):
+        super().__init__(daemon=True)
+        self.doc = doc
+        self.cond = threading.Condition()
+        self.request = None
+        self.result = None
+
+    def submit(self, req):
+        with self.cond:
+            self.request = req
+            self.cond.notify()
+
+    def take(self):
+        with self.cond:
+            res, self.result = self.result, None
+            return res
+
+    def run(self):
+        while True:
+            with self.cond:
+                while self.request is None:
+                    self.cond.wait()
+                req, self.request = self.request, None
+            page, zoom, x, y, w, h = req
+            try:
+                png, rw, rh = self.doc.render_tile(page, zoom, x, y, w, h)
+            except Exception:
+                continue
+            with self.cond:
+                self.result = (req, png, rw, rh)
+
+
 class Viewer:
     def __init__(self, path, term):
         self.path = path
@@ -89,15 +134,21 @@ class Viewer:
         self.page = 0
         self.mode = "fit"  # "fit", "width" or "custom"
         self.zoom = 1.0
-        self.sx = self.sy = 0.0
+        self.sx = self.sy = 0.0  # viewport top-left in page pixels at self.zoom
         self.buttons = []  # (x0, x1, action) on the toolbar row
         self.prompt = None  # text typed for "go to page", or None
         self.message = ""
-        self.drag = None  # (x, y, sx, sy, moved)
+        self.drag = None  # (px, py, sx, sy, moved)
         self.last_click = (0.0, 0, 0)
         self.last_flip = 0.0
+        self.last_zoom = 0.0
         self.edge_hits = 0
-        self.image_id = 1
+        self.tile = None  # what the terminal currently holds
+        self.pending = None  # request being rendered
+        self.next_id = 1
+        self.renderer = Renderer(self.doc)
+        self.chrome = ""  # last toolbar + status output, to skip redundant writes
+        self.placed = b""
         self.dirty = True
         self.resized = True
         self.running = True
@@ -114,9 +165,10 @@ class Viewer:
         pw, ph = self.doc.page_size(self.page)
         return min(self.vw / pw, self.vh / ph)
 
-    def page_px(self):
+    def page_px(self, zoom=None):
         pw, ph = self.doc.page_size(self.page)
-        return pw * self.zoom, ph * self.zoom
+        z = self.zoom if zoom is None else zoom
+        return pw * z, ph * z
 
     def apply_mode(self):
         if self.mode == "fit":
@@ -136,11 +188,11 @@ class Viewer:
             px, py = self.vw / 2, self.vh / 2
         fit = self.fit_zoom()
         new = min(max(self.zoom * factor, fit * ZOOM_MIN_FACTOR), ZOOM_MAX)
-        # page point under the cursor stays under the cursor
         ux, uy = (self.sx + px) / self.zoom, (self.sy + py) / self.zoom
         self.zoom = new
         self.sx, self.sy = ux * new - px, uy * new - py
         self.mode = "fit" if abs(new - fit) < 1e-6 else "custom"
+        self.last_zoom = time.time()
         self.clamp()
         self.dirty = True
 
@@ -154,6 +206,11 @@ class Viewer:
         self.sy = H - self.vh if at_bottom else 0
         self.clamp()
         self.edge_hits = 0
+        self.dirty = True
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self.apply_mode()
         self.dirty = True
 
     # --- scrolling --------------------------------------------------------
@@ -237,14 +294,8 @@ class Viewer:
             self.prompt = ""
             self.dirty = True
 
-    def set_mode(self, mode):
-        self.mode = mode
-        self.apply_mode()
-        self.dirty = True
-
     def on_mouse(self, m):
-        px = (m.x - 1) * self.cw + self.cw / 2
-        py = (m.y - 2) * self.ch + self.ch / 2
+        px, py = m.px, m.py - self.ch  # pointer in viewport pixels
         in_view = 2 <= m.y <= self.rows - 1
 
         if m.button in (WHEEL_UP, WHEEL_DOWN, WHEEL_LEFT, WHEEL_RIGHT):
@@ -255,7 +306,7 @@ class Viewer:
                 self.zoom_at(ZOOM_STEP if up else 1 / ZOOM_STEP, px, py)
             elif m.shift or m.button in (WHEEL_LEFT, WHEEL_RIGHT):
                 left = up or m.button == WHEEL_LEFT
-                self.scroll_x(-self.cw * 4 if left else self.cw * 4)
+                self.scroll_x(-self.cw * 3 if left else self.cw * 3)
             else:
                 self.scroll_y(-self.ch * 2 if up else self.ch * 2)
             return
@@ -269,20 +320,20 @@ class Viewer:
                         break
                 return
             if in_view:
-                self.drag = (m.x, m.y, self.sx, self.sy, False)
+                self.drag = (m.px, m.py, self.sx, self.sy, False)
             return
 
         if m.motion and self.drag:
-            x0, y0, sx0, sy0, _ = self.drag
-            self.sx = sx0 - (m.x - x0) * self.cw
-            self.sy = sy0 - (m.y - y0) * self.ch
-            self.drag = (x0, y0, sx0, sy0, True)
+            x0, y0, sx0, sy0, moved = self.drag
+            dx, dy = m.px - x0, m.py - y0
+            self.sx, self.sy = sx0 - dx, sy0 - dy
+            self.drag = (x0, y0, sx0, sy0, moved or abs(dx) + abs(dy) > self.cw / 2)
             self.clamp()
             self.dirty = True
             return
 
         if not m.pressed and self.drag:
-            x0, y0, _, _, moved = self.drag
+            moved = self.drag[4]
             self.drag = None
             if not moved:
                 now = time.time()
@@ -296,7 +347,102 @@ class Viewer:
                 else:
                     self.last_click = (now, m.x, m.y)
 
-    # --- drawing ----------------------------------------------------------
+    # --- tiles ------------------------------------------------------------
+
+    def wanted_tile(self):
+        """The page region worth rendering for the current view."""
+        W, H = self.page_px()
+        if W * H <= max(4 * self.vw * self.vh, 4_000_000):
+            return 0, 0, int(W), int(H)  # small enough: render the whole page
+        # otherwise the view plus one viewport of margin on every side
+        x0 = max(0, int(self.sx - self.vw))
+        y0 = max(0, int(self.sy - self.vh))
+        x1 = min(int(W), int(self.sx + 2 * self.vw))
+        y1 = min(int(H), int(self.sy + 2 * self.vh))
+        return x0, y0, x1 - x0, y1 - y0
+
+    def tile_ok(self):
+        t = self.tile
+        if t is None or t.page != self.page or abs(t.zoom - self.zoom) > 1e-6:
+            return False
+        W, H = self.page_px()
+        vx0, vy0 = max(self.sx, 0), max(self.sy, 0)
+        vx1, vy1 = min(self.sx + self.vw, W), min(self.sy + self.vh, H)
+        return t.x <= vx0 + 1 and t.y <= vy0 + 1 and vx1 - 1 <= t.x + t.w and vy1 - 1 <= t.y + t.h
+
+    def request_tile(self):
+        if self.tile_ok():
+            return
+        settling = time.time() - self.last_zoom < ZOOM_SETTLE
+        same_page = self.tile is not None and self.tile.page == self.page
+        if settling and same_page:
+            return  # keep stretching the old tile while the wheel is still turning
+        req = (self.page, self.zoom) + self.wanted_tile()
+        if req != self.pending:
+            self.pending = req
+            self.renderer.submit(req)
+
+    def receive_tile(self):
+        res = self.renderer.take()
+        if res is None:
+            return
+        req, png, w, h = res
+        if req != self.pending:
+            return  # superseded by a newer request
+        self.pending = None
+        old = self.tile
+        image_id = self.next_id
+        self.next_id = self.next_id % 1000 + 1
+        self.tile = Tile(image_id, req[0], req[1], req[2], req[3], w, h)
+        self.term.write(kitty_upload(png, image_id))
+        self.placed = b""
+        self.place()
+        if old is not None:
+            self.term.write(kitty_delete(old.image_id))
+
+    def place(self):
+        """Show the current view from the uploaded tile (stretched if zoom differs)."""
+        t = self.tile
+        if t is None or t.page != self.page:
+            return
+        W, H = self.page_px()
+        # visible part of the page, in viewport pixels
+        dx0, dy0 = max(0.0, -self.sx), max(0.0, -self.sy)
+        dx1, dy1 = min(float(self.vw), W - self.sx), min(float(self.vh), H - self.sy)
+        if dx1 <= dx0 or dy1 <= dy0:
+            return
+        r = t.zoom / self.zoom  # tile pixels per view pixel
+        sx0 = (self.sx + dx0) * r - t.x
+        sy0 = (self.sy + dy0) * r - t.y
+        sx1 = (self.sx + dx1) * r - t.x
+        sy1 = (self.sy + dy1) * r - t.y
+        # clip the source to what the tile holds, moving the destination along with it
+        if sx0 < 0:
+            dx0 -= sx0 / r
+            sx0 = 0
+        if sy0 < 0:
+            dy0 -= sy0 / r
+            sy0 = 0
+        if sx1 > t.w:
+            dx1 -= (sx1 - t.w) / r
+            sx1 = t.w
+        if sy1 > t.h:
+            dy1 -= (sy1 - t.h) / r
+            sy1 = t.h
+        if dx1 <= dx0 or dy1 <= dy0:
+            return
+        col, row = int(dx0 // self.cw), int(dy0 // self.ch)
+        offset = (int(dx0 - col * self.cw), int(dy0 - row * self.ch))
+        cells = None
+        if abs(r - 1) > 1e-6:  # different zoom: stretch over the destination cells
+            cells = (
+                max(1, round((dx1 - col * self.cw) / self.cw)),
+                max(1, round((dy1 - row * self.ch) / self.ch)),
+            )
+        seq = kitty_place(t.image_id, row + 2, col + 1, (sx0, sy0, sx1 - sx0, sy1 - sy0), offset, cells)
+        if seq != self.placed:
+            self.term.write(seq)
+            self.placed = seq
 
     def toolbar(self):
         t = self.t
@@ -357,17 +503,12 @@ class Viewer:
         return f"\x1b[{self.rows};1H\x1b[2K" + text
 
     def draw(self):
-        rgb = self.doc.render_view(
-            self.page, self.zoom, int(round(self.sx)), int(round(self.sy)), self.vw, self.vh
-        )
-        png = encode_png(rgb, self.vw, self.vh)
-        old, self.image_id = self.image_id, 3 - self.image_id
-        self.term.write(
-            self.toolbar().encode()
-            + kitty_image(png, self.image_id, 2, 1, self.vc, self.vr)
-            + kitty_delete(old)
-            + self.status().encode()
-        )
+        chrome = self.toolbar() + self.status()
+        if chrome != self.chrome:
+            self.term.write(chrome)
+            self.chrome = chrome
+        self.request_tile()
+        self.place()
         self.dirty = False
 
     # --- actions ----------------------------------------------------------
@@ -382,16 +523,22 @@ class Viewer:
 
     def run(self):
         signal.signal(signal.SIGWINCH, lambda *_: setattr(self, "resized", True))
+        self.renderer.start()
         while self.running:
             if self.resized:
                 self.resized = False
                 self.term.write("\x1b[2J")
                 self.measure()
                 self.apply_mode()
+                self.chrome, self.placed = "", b""
                 self.dirty = True
+            self.receive_tile()
             if self.dirty:
                 self.draw()
-            for ev in self.term.read_events(timeout=0.1):
+            else:
+                self.request_tile()  # picks up a finished zoom gesture
+            busy = self.pending is not None or time.time() - self.last_zoom < ZOOM_SETTLE * 2
+            for ev in self.term.read_events(timeout=0.01 if busy else 0.1):
                 self.handle(ev)
                 if not self.running:
                     break
@@ -426,6 +573,13 @@ def main(argv=None):
         pass
     finally:
         term.leave()
+        log = os.environ.get("PDFTERM_DEBUG")
+        if log:  # developer aid: how the terminal was detected and how much was sent
+            with open(log, "a") as f:
+                f.write(
+                    f"cell={term.cell} pixel_mouse={term.pixel_mouse} "
+                    f"rows={viewer.rows} cols={viewer.cols} bytes={term.bytes_written}\n"
+                )
 
 
 if __name__ == "__main__":
