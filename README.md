@@ -8,7 +8,7 @@ Ctrl+wheel, and click the toolbar buttons.
 ターミナルの中で動く、マウスで操作できる PDF ビューアーです。（日本語の説明は下にあります）
 
 ```
- ◀   ▶   1/3   −   78%   ＋   Fit   Width   report.pdf          ✕ Quit
+ 1/3   −   78%   ＋   Fit   Width   report.pdf                       ✕
 ┌──────────────────────────────────────────────────────────────────┐
 │                         (the PDF page)                           │
 └──────────────────────────────────────────────────────────────────┘
@@ -48,7 +48,7 @@ pdfterm file.pdf --page 5
 | Ctrl + wheel | Zoom in/out around the mouse pointer |
 | Swipe left / right (trackpad), Shift + wheel | Next / previous page (scrolls sideways first when the page is wider than the window) |
 | Right or middle drag | Move the page around |
-| Toolbar | ◀ ▶ previous/next page · − ＋ zoom · Fit · Width · ✕ quit |
+| Toolbar | − ＋ zoom · Fit (whole page) · Width (fit width) · ✕ quit |
 
 Press `v` to make the left drag move the page instead of selecting text; press `v` again to
 go back. (Trackpad pinch gestures are not passed to terminal programs, so zoom with a
@@ -71,9 +71,6 @@ double-click, Ctrl + wheel, or the − ＋ buttons.)
 Copying uses `pbcopy` on a local Mac and the OSC 52 escape sequence elsewhere (e.g. over
 SSH). If you map Command+C / Command+A in your terminal to send Alt+C / Alt+A, pdfterm
 treats them as copy / select the whole page.
-
-The UI language follows your system (English or Japanese). Set `PDFTERM_LANG=en` or
-`PDFTERM_LANG=ja` to choose.
 
 ## How it works
 
@@ -111,7 +108,7 @@ pdfterm ファイル.pdf
 | Ctrl + ホイール | マウスの位置を中心にズーム |
 | 左右スワイプ（トラックパッド）、Shift + ホイール | 右→左で次のページ、左→右で前のページ（ページが横にはみ出しているときは、先に左右にスクロール） |
 | 右ドラッグ | ページを動かす |
-| 上のボタン | ◀ ▶ ページ送り · − ＋ ズーム · 全体 · 幅 · ✕ 閉じる |
+| 上のボタン | − ＋ ズーム · Fit（ページ全体） · Width（幅に合わせる） · ✕ 閉じる |
 | v | 文字選択 / 移動 の切り替え（移動のときは、左ドラッグでページを動かし、ダブルクリックで拡大） |
 | q | 終了 |
 
