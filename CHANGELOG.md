@@ -8,6 +8,15 @@
 - The file type is detected from the content. Unsupported files get a clear error message.
 - For images the left drag moves the picture (there is no text to select), and the page
   counter is hidden for single-page documents.
+- Documents, text and SVG open too, converted to PDF so pages, zoom and text selection work:
+  - Office and iWork files (.docx, .doc, .rtf, .odt, .xlsx, .xls, .pptx, .ppt, .key, .numbers,
+    .pages, …) through LibreOffice when it is installed, otherwise on macOS through the
+    built-in text system and Quick Look previews, with a Quick Look thumbnail as last resort.
+  - Text, Markdown, source code, logs and JSON as pages in a monospace font (Japanese
+    included, Shift_JIS files too); CSV/TSV as a table.
+  - HTML and SVG, drawn by WebKit on macOS.
+  - Conversions are cached, have timeouts, show a short `see: converting …` note, and fail
+    with a one-line error.
 
 ### Changed
 - Renamed from **pdfterm** to **see**: the command is `see`, the package `see-viewer`, the
