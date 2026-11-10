@@ -24,6 +24,11 @@
   - HTML and SVG, drawn by WebKit on macOS.
   - Conversions are cached, have timeouts, show a short `see: converting …` note, and fail
     with a one-line error.
+- Video playback: `see movie.mp4` (MP4, MOV, MKV, WebM, AVI, …) plays the video with its
+  sound. ffmpeg decodes the frames at the shown size (up to ~400k pixels, 30 fps) and late
+  frames are skipped; ffplay plays the sound and the picture follows its clock. Click the
+  video or press Space to pause, click or drag the seek bar on the bottom line, ← / → to
+  seek 5 s, q / Esc / ✕ to quit. Needs ffmpeg; plays silently without ffplay.
 
 ### Changed
 - Renamed from **pdfterm** to **see**: the command is `see`, the package `see-viewer`, the

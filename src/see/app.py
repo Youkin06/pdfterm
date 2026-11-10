@@ -864,7 +864,7 @@ def main(argv=None):
         prog="see",
         description="View PDFs and images in the terminal with mouse controls (kitty graphics protocol).",
     )
-    parser.add_argument("file", help="PDF or image file to open")
+    parser.add_argument("file", help="PDF, image or video file to open")
     parser.add_argument("-p", "--page", type=int, default=1, help="page to open (1-based)")
     parser.add_argument("--version", action="version", version=f"see {__version__}")
     args = parser.parse_args(argv)
@@ -873,6 +873,12 @@ def main(argv=None):
         parser.exit(1, f"see: no such file: {args.file}\n")
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         parser.exit(1, "see: must be run in a terminal\n")
+
+    # Videos have their own player (see video.py).
+    from .video import is_video, play
+
+    if is_video(args.file):
+        return play(args.file)
 
     term = Terminal()
     try:
