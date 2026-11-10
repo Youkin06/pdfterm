@@ -17,6 +17,15 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
  Double-click: zoom   q: quit
 ```
 
+## Supported files
+
+| Kind | Status |
+|---|---|
+| PDF | ✅ Supported |
+| Images (PNG, JPEG, WebP, HEIC, …) | Planned |
+| Animated GIF | Planned |
+| Video (MP4, MOV, …) | Planned (a 30 fps prototype runs smoothly) |
+
 ## Requirements
 
 - A terminal that supports the kitty graphics protocol, such as
@@ -136,6 +145,15 @@ MIT
 ## 日本語
 
 ターミナル（Ghostty など）の中で、PDF をきれいな画像で表示するビューアーです。GUI のアプリのように、マウスやトラックパッドで操作できます。
+
+### 対応しているファイル
+
+| 種類 | 状態 |
+|---|---|
+| PDF | ✅ 対応 |
+| 画像（PNG、JPEG、WebP、HEIC など） | 対応予定 |
+| GIF アニメ | 対応予定 |
+| 動画（MP4、MOV など） | 対応予定（30fps の試作はなめらかに動作） |
 
 ### 必要なもの
 
