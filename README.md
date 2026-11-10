@@ -1,11 +1,11 @@
 # see
 
-A mouse-friendly viewer for the terminal. It opens PDF files and images today; animated GIFs
-and video are coming next. Everything is drawn as real images with the
+A mouse-friendly viewer for the terminal. It opens PDF files, images and videos; animated GIFs
+are coming next. Everything is drawn as real images with the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/), and you use it
 like a GUI viewer: swipe to turn pages, drag to select and copy text, double-click to zoom.
 
-ターミナルの中で動く、マウスで操作できるビューアーです（今は PDF と画像に対応。GIF アニメと動画も対応予定）。（[日本語の説明](#日本語)）
+ターミナルの中で動く、マウスで操作できるビューアーです（PDF、画像、動画に対応。GIF アニメも対応予定）。（[日本語の説明](#日本語)）
 
 ```
  report.pdf   3/12   82%   Fit   Width                                  ✕
@@ -25,7 +25,7 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
 | Images: PNG, JPEG, WebP, AVIF, BMP, TIFF, … | ✅ Supported (anything [Pillow](https://python-pillow.org) reads) |
 | iPhone photos (HEIC / HEIF) | ✅ On macOS (converted with the built-in `sips`) |
 | Animated GIF | Shows the first frame; animation is planned |
-| Video (MP4, MOV, …) | Planned (a 30 fps prototype runs smoothly) |
+| Video: MP4, MOV, MKV, WebM, AVI, … | ✅ Supported, with sound (needs [ffmpeg](https://ffmpeg.org)) |
 
 ## Requirements
 
@@ -33,6 +33,8 @@ like a GUI viewer: swipe to turn pages, drag to select and copy text, double-cli
   [Ghostty](https://ghostty.org), [kitty](https://sw.kovidgoyal.net/kitty/) or
   [WezTerm](https://wezterm.org). It also works inside [herdr](https://herdr.dev) panes.
 - Python 3.9 or newer
+- For video: [ffmpeg](https://ffmpeg.org) (`ffmpeg` and `ffprobe`; `ffplay` for the sound),
+  for example `brew install ffmpeg`. PDFs and images do not need it.
 
 ## Install
 
@@ -53,6 +55,7 @@ Uninstall with `pipx uninstall see-viewer` (or `uv tool uninstall see-viewer`).
 see file.pdf
 see file.pdf --page 5    # open at page 5
 see photo.png
+see movie.mp4            # play a video
 ```
 
 ### Screen
@@ -96,6 +99,26 @@ Copying uses `pbcopy` on a local Mac and the OSC 52 escape sequence elsewhere (f
 over SSH). If your terminal sends Alt+C / Alt+A for Command+C / Command+A, see treats
 them as copy and as "select the whole page".
 
+### Video
+
+```
+ movie.mp4                                                            ✕
+┌──────────────────────────────────────────────────────────────────────┐
+│                          (the video)                                 │
+└──────────────────────────────────────────────────────────────────────┘
+ ▶ 0:42 / 3:10  ━━━━━━━━━━━━●──────────────────────────────────────────
+```
+
+A video starts playing at once, with its sound. The bottom line shows ▶ while playing (❚❚
+when paused), the current time / the length, and a seek bar.
+
+| Action | Effect |
+|---|---|
+| Click on the video, or Space | Play / pause (at the end, Space plays again from the start) |
+| Click or drag on the seek bar | Jump to that point |
+| → / ← | Forward / back 5 seconds |
+| q, Esc, or click ✕ | Quit |
+
 ### Limitations
 
 - **Scanned PDFs** contain pictures of text, not text, so nothing can be selected on them.
@@ -106,6 +129,12 @@ them as copy and as "select the whole page".
 - Inside a multiplexer such as herdr, every new page image is passed on to the outer
   terminal, which costs a moment. Scrolling and dragging only move the image already sent,
   and neighbouring pages are prepared in advance, so this mainly shows when zooming.
+- **Video** is shown at up to about 400,000 pixels per frame (for example 840 × 470) and
+  30 frames per second, stretched to fill the window, so it is softer than in a video
+  player. Frames that would arrive late are skipped. After a seek the picture and sound
+  start once the first frame is decoded, which can take a moment in files with few
+  keyframes. There is no volume control, subtitle display or zoom for video. If `ffplay`
+  is missing the video plays without sound.
 
 ## How it works
 
@@ -122,6 +151,12 @@ them as copy and as "select the whole page".
   rendered while idle.
 - Trackpad swipes are recognised from the rate of scroll events: a page turns when the rate
   rises sharply, and turning re-arms when it has fallen well below its peak.
+- Videos are recognised by their extension (or, for other names, by `ffprobe`). `ffmpeg`
+  decodes the picture into raw RGB frames already scaled to the shown size, and each frame
+  is sent as a new image; two image ids take turns, and the old frame is deleted only
+  after the new one is in place, so nothing flickers. The sound is played by a separate
+  `ffplay` process, whose clock the picture follows; after a pause or a seek it is
+  restarted at the exact position. Both processes are stopped when see exits.
 
 ## Development
 
@@ -159,12 +194,13 @@ MIT
 | 画像（PNG、JPEG、WebP、AVIF、BMP、TIFF など） | ✅ 対応（Pillow で読めるもの） |
 | iPhone の写真（HEIC / HEIF） | ✅ Mac で対応（Mac 標準の `sips` で変換） |
 | GIF アニメ | 最初のコマだけ表示。アニメーションは対応予定 |
-| 動画（MP4、MOV など） | 対応予定（30fps の試作はなめらかに動作） |
+| 動画（MP4、MOV、MKV、WebM、AVI など） | ✅ 対応・音声つき（ffmpeg が必要） |
 
 ### 必要なもの
 
 - kitty 画像方式に対応したターミナル（Ghostty、kitty、WezTerm など）。herdr のペインの中でも使えます。
 - Python 3.9 以上
+- 動画を見るときは ffmpeg（`ffmpeg` と `ffprobe`、音を出すには `ffplay`）。`brew install ffmpeg` などで入れてください。PDF と画像には不要です。
 
 ### インストール
 
@@ -180,6 +216,7 @@ pipx install git+https://github.com/Youkin06/see
 see ファイル.pdf
 see ファイル.pdf --page 5    # 5ページ目から開く
 see 写真.png
+see 動画.mp4             # 動画を再生
 ```
 
 **画面**
@@ -218,9 +255,21 @@ see 写真.png
 
 コピーは、Mac では `pbcopy`、ssh 先などでは OSC 52 を使います。Command+C / Command+A を押したときに Alt+C / Alt+A を送るようにターミナルを設定していれば、それぞれ「コピー」「ページ全体を選択」として使えます。
 
+**動画**
+
+開くとすぐに音声つきで再生が始まります。下の行には、再生中は ▶（一時停止中は ❚❚）、今の時間 / 全体の長さ、シークバーが出ます。
+
+| 操作 | 動き |
+|---|---|
+| 動画をクリック、Space | 再生 / 一時停止（最後まで行ったあとの Space は最初から再生） |
+| シークバーをクリック・ドラッグ | その位置へ移動 |
+| → / ← | 5秒進む / 戻る |
+| q、Esc、✕ をクリック | 終了 |
+
 **できないこと**
 
 - **スキャンした PDF**：中身が文字ではなく写真なので、文字を選べません。
 - **画像の倍率**：画像の1画素が画面の1画素になる大きさが 100% です。小さい画像を大きく拡大したときは、ドット絵やアイコンがぼやけないよう、画素の角を残して拡大します。
 - **ピンチでのズーム**：ターミナルはピンチ操作をアプリに渡さないため使えません。ダブルクリック、Ctrl + ホイール、+ / − キーを使ってください。
 - herdr などの中では、新しいページの画像を外側のターミナルに渡すのに少し時間がかかります。スクロールやドラッグは送ってある画像を動かすだけで、前後のページも先に用意しているので、待ち時間を感じるのは主にズームのときです。
+- **動画の画質**：1コマあたり約40万画素（例：840 × 470）、毎秒30コマまでに縮めてから画面いっぱいに引き伸ばすので、動画プレーヤーよりは少しぼやけます。間に合わないコマは飛ばします。シークのあとは最初のコマができてから映像と音が始まるので、キーフレームの少ないファイルでは少し待つことがあります。音量の調整、字幕、動画の拡大はできません。`ffplay` がないときは音なしで再生します。
