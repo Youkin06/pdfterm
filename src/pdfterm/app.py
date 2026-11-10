@@ -50,40 +50,6 @@ HIGHLIGHT_RGBA = (64, 128, 255, 110)
 HIGHLIGHT_Z = 1 << 30
 MESSAGE_SECONDS = 2.5  # seconds an old image stays under the new one
 
-TEXT = {
-    "en": {
-        "fit": "Fit",
-        "width": "Width",
-        "quit": "Quit",
-        "copied": "Copied {n} characters",
-    },
-    "ja": {
-        "fit": "全体",
-        "width": "幅",
-        "quit": "閉じる",
-        "copied": "{n}文字をコピーしました",
-    },
-}
-
-
-def _lang():
-    """Pick the UI language: PDFTERM_LANG, then the macOS UI language, then LANG."""
-    v = os.environ.get("PDFTERM_LANG", "")
-    if not v and sys.platform == "darwin":
-        # terminals often export LANG=en_US.UTF-8 even when the Mac itself is in Japanese
-        try:
-            out = subprocess.run(
-                ["defaults", "read", "-g", "AppleLanguages"],
-                capture_output=True, text=True, timeout=1,
-            ).stdout
-            v = out.replace("(", "").strip().strip('"')
-        except Exception:
-            v = ""
-    if not v:
-        v = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG", "")
-    return "ja" if v.lower().startswith("ja") else "en"
-
-
 def width(s):
     return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
 
@@ -204,7 +170,6 @@ class Viewer:
         self.path = path
         self.term = term
         self.doc = Document(path)
-        self.t = TEXT[_lang()]
         self.page = 0
         self.mode = "fit"  # "fit", "width" or "custom"
         self.zoom = 1.0
@@ -542,7 +507,7 @@ class Viewer:
         if not text.strip():
             return
         copy_to_clipboard(text, self.term)
-        self.flash(self.t["copied"].format(n=len(text)))
+        self.flash(f"Copied {len(text)} characters")
 
     def flash(self, text):
         self.message = text
@@ -765,29 +730,24 @@ class Viewer:
         return True
 
     def toolbar(self):
-        t = self.t
         pct = round(self.zoom * 72 / 96 * 100)  # 100% = 96 dpi on screen
-        page = f" {self.page + 1}/{len(self.doc)} "
-        prev = (" ◀ ", lambda: self.go(self.page - 1))
-        nxt = (" ▶ ", lambda: self.go(self.page + 1))
+        page = (f" {self.page + 1}/{len(self.doc)} ", None)
         out_ = (" − ", lambda: self.zoom_at(1 / ZOOM_STEP ** 2))
         in_ = (" ＋ ", lambda: self.zoom_at(ZOOM_STEP ** 2))
         level = (f" {pct}% ", None)
-        fit = (f" {t['fit']} ", lambda: self.set_mode("fit"), "fit")
-        wide = (f" {t['width']} ", lambda: self.set_mode("width"), "width")
-        quit_long, quit_short = (f" ✕ {t['quit']} ", self.quit), (" ✕ ", self.quit)
+        fit = (" Fit ", lambda: self.set_mode("fit"), "fit")
+        wide = (" Width ", lambda: self.set_mode("width"), "width")
+        close = " ✕ "
 
         # drop the least important parts until the bar fits the pane width
         layouts = [
-            ([prev, nxt, (page, None), out_, level, in_, fit, wide], quit_long),
-            ([prev, nxt, (page, None), out_, level, in_, fit, wide], quit_short),
-            ([prev, nxt, (page, None), out_, level, in_, fit], quit_short),
-            ([prev, nxt, (page, None), out_, in_, fit], quit_short),
-            ([prev, nxt, (page, None), out_, in_], quit_short),
+            [page, out_, level, in_, fit, wide],
+            [page, out_, level, in_, fit],
+            [page, out_, in_, fit],
+            [page, out_, in_],
         ]
-        for items, right in layouts:
-            need = sum(width(i[0]) + 1 for i in items) + width(right[0])
-            if need <= self.cols:
+        for items in layouts:
+            if sum(width(i[0]) + 1 for i in items) + width(close) <= self.cols:
                 break
 
         self.buttons = []
@@ -803,14 +763,13 @@ class Viewer:
                 out.append(f"{style}{label}\x1b[0m ")
                 self.buttons.append((x, x + w - 1, action))
             x += w + 1
-        rw = width(right[0])
-        rx = self.cols - rw + 1
-        room = rx - x - 1
+        cx = self.cols - width(close) + 1
+        room = cx - x - 1
         if room > 6:
             out.append(f"\x1b[2m{clip(os.path.basename(self.path), room)}\x1b[0m")
         # place the close button by absolute position so it never wraps
-        out.append(f"\x1b[1;{rx}H\x1b[0;97;41m{right[0]}\x1b[0m")
-        self.buttons.append((rx, self.cols, right[1]))
+        out.append(f"\x1b[1;{cx}H\x1b[0m{close}")
+        self.buttons.append((cx, self.cols, self.quit))
         return "\x1b[1;1H\x1b[2K" + "".join(out)
 
     def status(self):
