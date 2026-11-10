@@ -19,6 +19,10 @@ from .convert import convert
 IMAGE_PT_PER_PX = 72 / 96
 
 
+class UnsupportedFile(Exception):
+    """The file is not of any kind see can show."""
+
+
 def open_document(path):
     """Open a PDF or an image, deciding by the file's content rather than its name."""
     with open(path, "rb") as f:
@@ -178,7 +182,7 @@ def _load_image(path):
                 pass
             finally:
                 os.unlink(tmp)
-        raise ValueError("not a PDF or a supported image")
+        raise UnsupportedFile(path)
 
 
 class Image:
