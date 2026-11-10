@@ -3,7 +3,8 @@
 ## Unreleased
 
 ### Added
-- A demo GIF at the top of the README (`docs/demo.gif`).
+- A demo GIF at the top of the README (`docs/demo.gif`): a gray background, ending on a
+  `❯ see` prompt.
 
 ## 0.4.0 — 2026-11-10
 
