@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-11-10
 
 ### Added
 - `scripts/release.sh X.Y.Z` releases a version in one go: version bump, PR, CI, merge, tag
