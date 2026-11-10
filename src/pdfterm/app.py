@@ -1,7 +1,9 @@
 """pdfterm: a mouse-friendly PDF viewer for terminals with the kitty graphics protocol."""
 
 import argparse
+import base64
 import math
+import shutil
 import os
 import signal
 import subprocess
@@ -9,9 +11,10 @@ import sys
 import threading
 import time
 import unicodedata
+import zlib
 
 from . import __version__
-from .render import Document, kitty_delete, kitty_place, kitty_upload
+from .render import Document, Image, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload
 from .term import (
     WHEEL_DOWN,
     WHEEL_LEFT,
@@ -36,7 +39,14 @@ TILE_MAX_PX = 4_000_000
 # Each new image costs a full raw transfer through herdr, so render about 1.6 screens'
 # worth around the view instead of everything allowed; edge prefetch covers the rest.
 TILE_VIEW_FACTOR = 1.6
-RETIRE_DELAY = 0.5  # seconds an old image stays under the new one
+RETIRE_DELAY = 0.5
+# Text selection is drawn with placements of one small translucent image, so moving the
+# selection never re-sends pixel data.
+HIGHLIGHT_ID = 9999
+HIGHLIGHT_W, HIGHLIGHT_H = 2048, 256
+HIGHLIGHT_RGBA = (64, 128, 255, 90)
+HIGHLIGHT_Z = 1 << 30
+MESSAGE_SECONDS = 2.5  # seconds an old image stays under the new one
 
 TEXT = {
     "en": {
@@ -44,16 +54,26 @@ TEXT = {
         "width": "Width",
         "quit": "Quit",
         "goto": "Go to page: ",
-        "hint": "Wheel: scroll · Ctrl+wheel: zoom · Drag: move · Double-click: zoom · g: page · q: quit",
+        "hint": "Drag: select text (copied) · Wheel: scroll · Ctrl+wheel: zoom · v: select/move · g: page · q: quit",
+        "hint_hand": "Drag: move · Double-click: zoom · Wheel: scroll · Ctrl+wheel: zoom · v: select/move · q: quit",
         "bad_page": "No such page",
+        "select": "Select",
+        "hand": "Move",
+        "copied": "Copied {n} characters",
+        "no_text": "No text here (scanned page?)",
     },
     "ja": {
         "fit": "全体",
         "width": "幅",
         "quit": "閉じる",
         "goto": "ページ番号: ",
-        "hint": "ホイール: スクロール · Ctrl+ホイール: ズーム · ドラッグ: 移動 · ダブルクリック: 拡大 · g: ページ指定 · q: 終了",
+        "hint": "ドラッグ: 文字を選択（自動でコピー） · ホイール: スクロール · Ctrl+ホイール: ズーム · v: 選択/移動 · g: ページ指定 · q: 終了",
+        "hint_hand": "ドラッグ: 移動 · ダブルクリック: 拡大 · ホイール: スクロール · Ctrl+ホイール: ズーム · v: 選択/移動 · q: 終了",
         "bad_page": "そのページはありません",
+        "select": "選択",
+        "hand": "移動",
+        "copied": "{n}文字をコピーしました",
+        "no_text": "ここには文字のデータがありません（スキャンしたページ？）",
     },
 }
 
@@ -89,6 +109,38 @@ def clip(s, w):
         out += c
         used += cw
     return out
+
+
+def merge_lines(rects):
+    """Join character rectangles that sit on the same line into one rectangle per line."""
+    lines = []
+    for l, b, r, t in sorted(rects, key=lambda q: (-q[3], q[0])):
+        for i, (L, B, R, T) in enumerate(lines):
+            overlap = min(t, T) - max(b, B)
+            if overlap > 0.5 * min(t - b, T - B):
+                lines[i] = (min(l, L), min(b, B), max(r, R), max(t, T))
+                break
+        else:
+            lines.append((l, b, r, t))
+    return lines
+
+
+def copy_to_clipboard(text, term):
+    """Copy via pbcopy on a local Mac, otherwise ask the terminal (OSC 52)."""
+    if sys.platform == "darwin" and shutil.which("pbcopy") and not os.environ.get("SSH_TTY"):
+        try:
+            subprocess.run(["pbcopy"], input=text.encode(), timeout=2, check=True)
+            return
+        except Exception:
+            pass
+    data = base64.standard_b64encode(text.encode()).decode()
+    term.write(f"\x1b]52;c;{data}\x07")
+
+
+def highlight_image():
+    pixel = bytes(HIGHLIGHT_RGBA)
+    data = zlib.compress(pixel * (HIGHLIGHT_W * HIGHLIGHT_H), 9)
+    return Image(data, HIGHLIGHT_W, HIGHLIGHT_H, 4)
 
 
 class Tile:
@@ -172,7 +224,12 @@ class Viewer:
         self.buttons = []  # (x0, x1, action) on the toolbar row
         self.prompt = None  # text typed for "go to page", or None
         self.message = ""
-        self.drag = None  # (px, py, sx, sy, moved)
+        self.message_until = 0.0
+        self.tool = "select"  # left drag: "select" text or "hand" (move the page)
+        self.drag = None  # (px, py, sx, sy, moved) while moving the page
+        self.selecting = None  # (px, py, anchor_char, moved) while selecting text
+        self.sel = None  # (page, first_char, last_char)
+        self.highlight = b""
         self.last_click = (0.0, 0, 0)
         self.last_flip = 0.0
         self.last_zoom = 0.0
@@ -238,6 +295,7 @@ class Viewer:
         if page == self.page:
             return
         self.page = page
+        self.sel = None
         self.apply_mode()
         W, H = self.page_px()
         self.sy = H - self.vh if at_bottom else 0
@@ -302,11 +360,22 @@ class Viewer:
             self.dirty = True
             return
 
-        self.message = ""
         step_y = self.ch * 3
         c = k.char if k.name == "char" else ""
-        if k.name == "ctrl-c" or c == "q" or k.name == "esc":
+        alt = k.char if k.name == "alt" else ""
+        if k.name == "esc" and self.sel:
+            self.set_selection(None)
+        elif k.name == "ctrl-c" or c == "q" or k.name == "esc":
             self.running = False
+        elif alt == "c":  # Command+C via the Ghostty mapping
+            self.copy_selection()
+        elif alt == "a":  # Command+A: whole page
+            n = self.doc.char_count(self.page)
+            if n:
+                self.set_selection((self.page, 0, n - 1))
+                self.copy_selection()
+        elif c == "v":
+            self.toggle_tool()
         elif k.name in ("right", "pagedown") or c in ("l", "n", " "):
             self.go(self.page + 1)
         elif k.name in ("left", "pageup") or c in ("h", "p"):
@@ -348,16 +417,32 @@ class Viewer:
                 self.scroll_y(-self.ch * 2 if up else self.ch * 2)
             return
 
-        if m.button == 0 and m.pressed and not m.motion:
+        if m.pressed and not m.motion and m.button in (0, 1, 2):
             if m.y == 1:
-                for x0, x1, action in self.buttons:
-                    if x0 <= m.x <= x1:
-                        action()
-                        self.dirty = True
-                        break
+                if m.button == 0:
+                    for x0, x1, action in self.buttons:
+                        if x0 <= m.x <= x1:
+                            action()
+                            self.dirty = True
+                            break
                 return
-            if in_view:
+            if not in_view:
+                return
+            if m.button == 0 and self.tool == "select":
+                self.selecting = (px, py, self.char_at(px, py), False)
+            else:  # hand tool, or middle/right drag in either tool
                 self.drag = (m.px, m.py, self.sx, self.sy, False)
+            return
+
+        if m.motion and self.selecting:
+            x0, y0, anchor, moved = self.selecting
+            moved = moved or abs(px - x0) + abs(py - y0) > self.cw / 2
+            here = self.char_at(px, py, loose=True)
+            if anchor is None:
+                anchor = here
+            self.selecting = (x0, y0, anchor, moved)
+            if moved and anchor is not None and here is not None:
+                self.set_selection((self.page, min(anchor, here), max(anchor, here)))
             return
 
         if m.motion and self.drag:
@@ -369,20 +454,108 @@ class Viewer:
             self.dirty = True
             return
 
+        if not m.pressed and self.selecting:
+            moved = self.selecting[3]
+            self.selecting = None
+            if moved:
+                self.copy_selection()
+                return
+            if self.is_double_click(m):
+                i = self.char_at(px, py)
+                if i is None:
+                    if not self.doc.char_count(self.page):
+                        self.flash(self.t["no_text"])
+                else:
+                    a, b = self.doc.word_at(self.page, i)
+                    self.set_selection((self.page, a, b))
+                    self.copy_selection()
+            else:
+                self.set_selection(None)
+            return
+
         if not m.pressed and self.drag:
             moved = self.drag[4]
             self.drag = None
-            if not moved:
-                now = time.time()
-                t0, cx, cy = self.last_click
-                if now - t0 < DOUBLE_CLICK and (cx, cy) == (m.x, m.y):
-                    self.last_click = (0.0, 0, 0)
-                    if self.mode == "fit":
-                        self.zoom_at(2.0, px, py)
-                    else:
-                        self.set_mode("fit")
+            if not moved and self.is_double_click(m):
+                if self.mode == "fit":
+                    self.zoom_at(2.0, px, py)
                 else:
-                    self.last_click = (now, m.x, m.y)
+                    self.set_mode("fit")
+
+    def is_double_click(self, m):
+        now = time.time()
+        t0, cx, cy = self.last_click
+        if now - t0 < DOUBLE_CLICK and abs(cx - m.x) <= 1 and abs(cy - m.y) <= 1:
+            self.last_click = (0.0, 0, 0)
+            return True
+        self.last_click = (now, m.x, m.y)
+        return False
+
+    # --- text selection ---------------------------------------------------
+
+    def to_pdf(self, px, py):
+        """Viewport pixel -> PDF point (origin bottom-left)."""
+        ph = self.doc.page_size(self.page)[1]
+        return (self.sx + px) / self.zoom, ph - (self.sy + py) / self.zoom
+
+    def char_at(self, px, py, loose=False):
+        x, y = self.to_pdf(px, py)
+        tol = (12 if loose else 3) * 72 / 96 * max(1.0, 1 / max(self.zoom, 1e-6))
+        return self.doc.char_at(self.page, x, y, tol)
+
+    def set_selection(self, sel):
+        if sel != self.sel:
+            self.sel = sel
+            self.dirty = True
+
+    def copy_selection(self):
+        if not self.sel:
+            return
+        page, a, b = self.sel
+        text = self.doc.text(page, a, b)
+        if not text.strip():
+            return
+        copy_to_clipboard(text, self.term)
+        self.flash(self.t["copied"].format(n=len(text)))
+
+    def flash(self, text):
+        self.message = text
+        self.message_until = time.time() + MESSAGE_SECONDS
+        self.dirty = True
+
+    def toggle_tool(self):
+        self.tool = "hand" if self.tool == "select" else "select"
+        self.dirty = True
+
+    def draw_highlight(self):
+        """Cover the selected text with stretched-free pieces of the translucent image."""
+        out = []
+        if self.sel and self.sel[0] == self.page:
+            ph = self.doc.page_size(self.page)[1]
+            z = self.zoom
+            for l, b, r, t in merge_lines(self.doc.text_rects(*self.sel)):
+                x0, y0 = l * z - self.sx, (ph - t) * z - self.sy
+                x1, y1 = r * z - self.sx, (ph - b) * z - self.sy
+                x0, y0 = max(0.0, x0), max(0.0, y0)
+                x1, y1 = min(float(self.vw), x1), min(float(self.vh), y1)
+                y = y0
+                while y < y1 - 0.5:  # split pieces larger than the highlight image
+                    h = min(HIGHLIGHT_H, y1 - y)
+                    x = x0
+                    while x < x1 - 0.5:
+                        w = min(HIGHLIGHT_W, x1 - x)
+                        col, row = int(x // self.cw), int(y // self.ch)
+                        off = (int(x - col * self.cw), int(y - row * self.ch))
+                        out.append((row + 2, col + 1, (0, 0, w, h), off))
+                        x += w
+                    y += h
+        seq = b"".join(
+            kitty_place(HIGHLIGHT_ID, r, c, src, off, None, HIGHLIGHT_Z, placement=i + 1)
+            for i, (r, c, src, off) in enumerate(out)
+        )
+        if seq != self.highlight:
+            self.term.write(kitty_unplace_all(HIGHLIGHT_ID) + seq)
+            self.highlight = seq
 
     # --- tiles ------------------------------------------------------------
 
@@ -574,14 +747,16 @@ class Viewer:
         fit = (f" {t['fit']} ", lambda: self.set_mode("fit"), "fit")
         wide = (f" {t['width']} ", lambda: self.set_mode("width"), "width")
         quit_long, quit_short = (f" ✕ {t['quit']} ", self.quit), (" ✕ ", self.quit)
+        icon = "Ｉ" if self.tool == "select" else "✋"
+        tool = (f" {icon} {t[self.tool]} ", self.toggle_tool)
 
         # drop the least important parts until the bar fits the pane width
         layouts = [
-            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit, wide], quit_long),
-            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit, wide], quit_short),
-            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit], quit_short),
-            ([prev, nxt, (page, self.start_prompt), out_, in_, fit], quit_short),
-            ([prev, nxt, (page, self.start_prompt), out_, in_], quit_short),
+            ([prev, nxt, (page, self.start_prompt), tool, out_, level, in_, fit, wide], quit_long),
+            ([prev, nxt, (page, self.start_prompt), tool, out_, level, in_, fit, wide], quit_short),
+            ([prev, nxt, (page, self.start_prompt), tool, out_, level, in_, fit], quit_short),
+            ([prev, nxt, (page, self.start_prompt), tool, out_, in_, fit], quit_short),
+            ([prev, nxt, (page, self.start_prompt), tool, out_, in_], quit_short),
         ]
         for items, right in layouts:
             need = sum(width(i[0]) + 1 for i in items) + width(right[0])
@@ -614,10 +789,11 @@ class Viewer:
     def status(self):
         if self.prompt is not None:
             text = f"\x1b[1m{self.t['goto']}{self.prompt}\x1b[0m▏"
-        elif self.message:
-            text = f"\x1b[33m{self.message}\x1b[0m"
+        elif self.message and time.time() < self.message_until:
+            text = f"\x1b[33m{clip(self.message, self.cols - 1)}\x1b[0m"
         else:
-            text = f"\x1b[2m{clip(self.t['hint'], self.cols - 1)}\x1b[0m"
+            hint = self.t["hint" if self.tool == "select" else "hint_hand"]
+            text = f"\x1b[2m{clip(hint, self.cols - 1)}\x1b[0m"
         return f"\x1b[{self.rows};1H\x1b[2K" + text
 
     def draw(self):
@@ -627,6 +803,7 @@ class Viewer:
             self.chrome = chrome
         self.request_tile()
         self.place()
+        self.draw_highlight()
         self.dirty = False
 
     # --- actions ----------------------------------------------------------
@@ -642,16 +819,20 @@ class Viewer:
     def run(self):
         signal.signal(signal.SIGWINCH, lambda *_: setattr(self, "resized", True))
         self.renderer.start()
+        self.term.write(kitty_upload(highlight_image(), HIGHLIGHT_ID))
         while self.running:
             if self.resized:
                 self.resized = False
                 self.term.write("\x1b[2J")
                 self.measure()
                 self.apply_mode()
-                self.chrome, self.placed = "", b""
+                self.chrome, self.placed, self.highlight = "", b"", b""
                 self.dirty = True
             self.receive_tile()
             self.drop_retired()
+            if self.message and time.time() >= self.message_until:
+                self.message = ""
+                self.dirty = True
             if self.dirty:
                 self.draw()
             else:

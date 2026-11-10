@@ -14,6 +14,7 @@ class Document:
         self.pdf = pdfium.PdfDocument(path)
         self.lock = threading.Lock()
         self._sizes = {}
+        self._text = {}  # page index -> PdfTextPage
 
     def __len__(self):
         return len(self.pdf)
@@ -24,6 +25,63 @@ class Document:
             with self.lock:
                 self._sizes[index] = self.pdf[index].get_size()
         return self._sizes[index]
+
+    # --- text (coordinates are PDF points, origin at the bottom-left) ---------------
+
+    def _textpage(self, index):
+        tp = self._text.get(index)
+        if tp is None:
+            tp = self._text[index] = self.pdf[index].get_textpage()
+        return tp
+
+    def char_at(self, index, x, y, tolerance):
+        """Index of the character at (x, y), or None."""
+        with self.lock:
+            i = self._textpage(index).get_index(x, y, tolerance, tolerance)
+        return i if i is not None and i >= 0 else None
+
+    def char_count(self, index):
+        with self.lock:
+            return self._textpage(index).count_chars()
+
+    def text(self, index, first, last):
+        """Text of characters first..last (inclusive), with plain newlines."""
+        with self.lock:
+            s = self._textpage(index).get_text_range(first, last - first + 1)
+        return s.replace("\r\n", "\n").replace("\r", "\n")
+
+    def text_rects(self, index, first, last):
+        """Rectangles (left, bottom, right, top) covering characters first..last."""
+        with self.lock:
+            tp = self._textpage(index)
+            n = tp.count_rects(first, last - first + 1)
+            return [tp.get_rect(i) for i in range(n)]
+
+    def word_at(self, index, i):
+        """(first, last) of the word around character i."""
+        with self.lock:
+            tp = self._textpage(index)
+            n = tp.count_chars()
+            text = tp.get_text_range(0, n)
+        if len(text) != n:  # unusual text layer; just take the character itself
+            return i, i
+
+        def kind(c):
+            if c.isspace():
+                return 0
+            if c.isalnum() or c == "_":
+                return 1 if c.isascii() else 2
+            return 3  # punctuation: one at a time
+
+        k = kind(text[i])
+        if k in (0, 3):
+            return i, i
+        a = b = i
+        while a > 0 and kind(text[a - 1]) == k:
+            a -= 1
+        while b < n - 1 and kind(text[b + 1]) == k:
+            b += 1
+        return a, b
 
     def render_tile(self, index, zoom, x, y, w, h):
         """Render the w x h pixel region at (x, y) of page `index` scaled by `zoom`.
@@ -78,7 +136,7 @@ def kitty_upload(image, image_id):
     return b"".join(out)
 
 
-def kitty_place(image_id, row, col, src, offset=(0, 0), cells=None, z=0):
+def kitty_place(image_id, row, col, src, offset=(0, 0), cells=None, z=0, placement=1):
     """Show the `src` rectangle (x, y, w, h in image pixels) of an uploaded image.
 
     The placement starts at cell (row, col), shifted by `offset` pixels inside that cell.
@@ -87,10 +145,15 @@ def kitty_place(image_id, row, col, src, offset=(0, 0), cells=None, z=0):
     which makes panning cheap: no image data is sent again. Higher `z` draws on top.
     """
     x, y, w, h = (max(0, int(round(v))) for v in src)
-    keys = f"a=p,i={image_id},p=1,x={x},y={y},w={max(1, w)},h={max(1, h)},X={offset[0]},Y={offset[1]},z={z},C=1,q=2"
+    keys = f"a=p,i={image_id},p={placement},x={x},y={y},w={max(1, w)},h={max(1, h)},X={offset[0]},Y={offset[1]},z={z},C=1,q=2"
     if cells:
         keys += f",c={max(1, cells[0])},r={max(1, cells[1])}"
     return f"\x1b[{row};{col}H\x1b_G{keys}\x1b\\".encode()
+
+
+def kitty_unplace_all(image_id):
+    """Remove every placement of an image but keep its data."""
+    return f"\x1b_Ga=d,d=i,i={image_id},q=2\x1b\\".encode()
 
 
 def kitty_delete(image_id):
