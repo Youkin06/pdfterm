@@ -25,6 +25,11 @@ def open_document(path):
         head = f.read(1024)
     if b"%PDF-" in head:
         return Document(path)
+    from .anim import open_animated  # animated GIF, APNG and WebP
+
+    animated = open_animated(path)
+    if animated:
+        return animated
     # documents, text and SVG are converted to a PDF first (see convert.py)
     converted = convert(path, head)
     if converted:
