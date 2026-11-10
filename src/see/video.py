@@ -22,7 +22,7 @@ import unicodedata
 import zlib
 
 from .render import Image, kitty_delete, kitty_place, kitty_upload
-from .term import Key, Mouse, Terminal
+from .term import NO_GRAPHICS, Key, Mouse, Terminal
 
 VIDEO_EXTS = {
     ".mp4", ".m4v", ".mov", ".qt", ".mkv", ".webm", ".avi", ".wmv", ".flv", ".mpg", ".mpeg",
@@ -684,6 +684,11 @@ def play(path):
     try:
         term.enter()
         entered = True
+        if not term.graphics:
+            term.leave()
+            entered = False
+            sys.stderr.write(NO_GRAPHICS)
+            sys.exit(1)
         player.run()
     except KeyboardInterrupt:
         pass

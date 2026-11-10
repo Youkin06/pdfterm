@@ -44,6 +44,23 @@ class ModeReport:
 
 
 @dataclass
+class GraphicsReply:
+    ok: bool  # the terminal answered a kitty graphics query with OK
+
+
+@dataclass
+class DeviceAttributes:
+    pass  # reply to "ESC [ c"; every terminal sends one
+
+
+NO_GRAPHICS = (
+    "see: this terminal can't show images.\n"
+    "     see needs the kitty graphics protocol: use Ghostty, kitty or WezTerm.\n"
+    "     (Set SEE_FORCE_GRAPHICS=1 to try anyway.)\n"
+)
+
+
+@dataclass
 class WindowPixels:
     height: int
     width: int
@@ -57,6 +74,7 @@ class Terminal:
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
         self._buf = ""
         self.pixel_mouse = False
+        self.graphics = True  # does the terminal support the kitty graphics protocol?
         self.cell = (8, 16)
         self.bytes_written = 0
 
@@ -75,6 +93,22 @@ class Terminal:
             if any(isinstance(e, ModeReport) and e.mode == 1016 for e in evs):
                 self.pixel_mouse = any(e.value == 1 for e in evs if isinstance(e, ModeReport))
                 break
+        self.graphics = self._query_graphics()
+
+    def _query_graphics(self):
+        """Ask for kitty graphics support. Terminals without it ignore the query but still
+        answer the device-attributes request sent right after, so that reply ends the wait."""
+        if os.environ.get("SEE_FORCE_GRAPHICS"):
+            return True
+        self.write("\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c")
+        deadline = time.time() + 1.0
+        while time.time() < deadline:
+            for ev in self.read_events(timeout=deadline - time.time()):
+                if isinstance(ev, GraphicsReply):
+                    return ev.ok
+                if isinstance(ev, DeviceAttributes):
+                    return False
+        return True  # no answer at all: assume it works rather than refuse
 
     def leave(self):
         self.write(
@@ -183,6 +217,14 @@ def parse(s):
                 if ev is not None:
                     events.append(ev)
                 i = j + 1
+            elif nxt == "_":  # APC, e.g. a kitty graphics reply: ESC _ G ... ESC \\
+                end = s.find("\x1b\\", i + 2)
+                if end < 0:
+                    return events, s[i:]
+                body = s[i + 2 : end]
+                if body.startswith("G"):
+                    events.append(GraphicsReply(body.split(";", 1)[-1].startswith("OK")))
+                i = end + 2
             elif nxt == "O":
                 if i + 2 >= n:
                     return events, s[i:]
@@ -223,6 +265,8 @@ def _parse_csi(body, final):
             ctrl=bool(b & CTRL),
             motion=bool(b & MOTION),
         )
+    if final == "c" and body.startswith("?"):
+        return DeviceAttributes()
     if final == "y" and body.startswith("?") and body.endswith("$"):
         try:
             mode, value = (int(v) for v in body[1:-1].split(";"))
