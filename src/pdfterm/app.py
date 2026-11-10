@@ -44,7 +44,7 @@ RETIRE_DELAY = 0.5
 # selection never re-sends pixel data.
 HIGHLIGHT_ID = 9999
 HIGHLIGHT_W, HIGHLIGHT_H = 2048, 256
-HIGHLIGHT_RGBA = (64, 128, 255, 90)
+HIGHLIGHT_RGBA = (64, 128, 255, 110)
 HIGHLIGHT_Z = 1 << 30
 MESSAGE_SECONDS = 2.5  # seconds an old image stays under the new one
 
@@ -230,6 +230,7 @@ class Viewer:
         self.selecting = None  # (px, py, anchor_char, moved) while selecting text
         self.sel = None  # (page, first_char, last_char)
         self.highlight = b""
+        self.highlight_sent = False  # the translucent image is uploaded on first use
         self.last_click = (0.0, 0, 0)
         self.last_flip = 0.0
         self.last_zoom = 0.0
@@ -554,6 +555,9 @@ class Viewer:
             for i, (r, c, src, off) in enumerate(out)
         )
         if seq != self.highlight:
+            if seq and not self.highlight_sent:
+                self.term.write(kitty_upload(highlight_image(), HIGHLIGHT_ID))
+                self.highlight_sent = True
             self.term.write(kitty_unplace_all(HIGHLIGHT_ID) + seq)
             self.highlight = seq
 
@@ -819,11 +823,13 @@ class Viewer:
     def run(self):
         signal.signal(signal.SIGWINCH, lambda *_: setattr(self, "resized", True))
         self.renderer.start()
-        self.term.write(kitty_upload(highlight_image(), HIGHLIGHT_ID))
         while self.running:
             if self.resized:
                 self.resized = False
-                self.term.write("\x1b[2J")
+                # Clear only the text, line by line: erasing the whole display (ED 2) can
+                # also delete kitty images in Ghostty-based terminals and multiplexers.
+                rows = self.term.size()[0]
+                self.term.write("".join(f"\x1b[{r};1H\x1b[2K" for r in range(1, rows + 1)))
                 self.measure()
                 self.apply_mode()
                 self.chrome, self.placed, self.highlight = "", b"", b""

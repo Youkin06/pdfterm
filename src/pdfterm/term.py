@@ -66,7 +66,7 @@ class Terminal:
         self._saved = termios.tcgetattr(self.fd_in)
         tty.setraw(self.fd_in)
         # alternate screen, hide cursor, mouse: buttons + drag motion, SGR encoding
-        self.write("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[2J")
+        self.write("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1002h\x1b[?1006h")
         # SGR-pixels mouse mode (1016) gives smooth dragging; ask whether it is supported
         self.write("\x1b[?1016h\x1b[?1016$p")
         deadline = time.time() + 0.3
