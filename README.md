@@ -43,15 +43,16 @@ pdfterm file.pdf --page 5
 | Action | Effect |
 |---|---|
 | Drag | Select text; it is copied to the clipboard when you release |
-| Double-click | Select (and copy) a word |
+| Double-click | Zoom in 2× at that spot / back to the whole page |
 | Wheel / swipe up and down | Scroll the page; turns one page at the top/bottom (or when the whole page is visible) |
 | Ctrl + wheel | Zoom in/out around the mouse pointer |
 | Swipe left / right (trackpad), Shift + wheel | Next / previous page (scrolls sideways first when the page is wider than the window) |
 | Right or middle drag | Move the page around |
 | Toolbar | ◀ ▶ previous/next page · page number: go to page · − ＋ zoom · Fit · Width · ✕ quit |
 
-Press `v` to make the left drag move the page instead of selecting text (a double-click then
-zooms in 2× / back to the whole page); press `v` again to go back.
+Press `v` to make the left drag move the page instead of selecting text; press `v` again to
+go back. (Trackpad pinch gestures are not passed to terminal programs, so zoom with a
+double-click, Ctrl + wheel, or the − ＋ buttons.)
 
 ### Keyboard
 
@@ -106,7 +107,7 @@ pdfterm ファイル.pdf
 | 操作 | 動き |
 |---|---|
 | ドラッグ | 文字を選択（離すと自動でコピー） |
-| ダブルクリック | 単語を選択してコピー |
+| ダブルクリック | その場所を2倍に拡大 / ページ全体に戻す |
 | ホイール / 上下スワイプ | スクロール（ページの端やページ全体が見えているときは1ページめくる） |
 | Ctrl + ホイール | マウスの位置を中心にズーム |
 | 左右スワイプ（トラックパッド）、Shift + ホイール | 右→左で次のページ、左→右で前のページ（ページが横にはみ出しているときは、先に左右にスクロール） |

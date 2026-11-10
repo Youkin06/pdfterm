@@ -57,32 +57,6 @@ class Document:
             n = tp.count_rects(first, last - first + 1)
             return [tp.get_rect(i) for i in range(n)]
 
-    def word_at(self, index, i):
-        """(first, last) of the word around character i."""
-        with self.lock:
-            tp = self._textpage(index)
-            n = tp.count_chars()
-            text = tp.get_text_range(0, n)
-        if len(text) != n:  # unusual text layer; just take the character itself
-            return i, i
-
-        def kind(c):
-            if c.isspace():
-                return 0
-            if c.isalnum() or c == "_":
-                return 1 if c.isascii() else 2
-            return 3  # punctuation: one at a time
-
-        k = kind(text[i])
-        if k in (0, 3):
-            return i, i
-        a = b = i
-        while a > 0 and kind(text[a - 1]) == k:
-            a -= 1
-        while b < n - 1 and kind(text[b + 1]) == k:
-            b += 1
-        return a, b
-
     def render_tile(self, index, zoom, x, y, w, h):
         """Render the w x h pixel region at (x, y) of page `index` scaled by `zoom`.
 

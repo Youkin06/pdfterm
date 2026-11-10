@@ -58,7 +58,6 @@ TEXT = {
         "goto": "Go to page: ",
         "bad_page": "No such page",
         "copied": "Copied {n} characters",
-        "no_text": "No text here (scanned page?)",
     },
     "ja": {
         "fit": "全体",
@@ -67,7 +66,6 @@ TEXT = {
         "goto": "ページ番号: ",
         "bad_page": "そのページはありません",
         "copied": "{n}文字をコピーしました",
-        "no_text": "ここには文字のデータがありません（スキャンしたページ？）",
     },
 }
 
@@ -516,14 +514,7 @@ class Viewer:
                 self.copy_selection()
                 return
             if self.is_double_click(m):
-                i = self.char_at(px, py)
-                if i is None:
-                    if not self.doc.char_count(self.page):
-                        self.flash(self.t["no_text"])
-                else:
-                    a, b = self.doc.word_at(self.page, i)
-                    self.set_selection((self.page, a, b))
-                    self.copy_selection()
+                self.toggle_zoom(px, py)
             else:
                 self.set_selection(None)
             return
@@ -532,10 +523,14 @@ class Viewer:
             moved = self.drag[4]
             self.drag = None
             if not moved and self.is_double_click(m):
-                if self.mode == "fit":
-                    self.zoom_at(2.0, px, py)
-                else:
-                    self.set_mode("fit")
+                self.toggle_zoom(px, py)
+
+    def toggle_zoom(self, px, py):
+        """Double-click: zoom in 2x at the pointer, or back to the whole page."""
+        if self.mode == "fit":
+            self.zoom_at(2.0, px, py)
+        else:
+            self.set_mode("fit")
 
     def is_double_click(self, m):
         now = time.time()
