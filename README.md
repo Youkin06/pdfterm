@@ -44,9 +44,9 @@ pdfterm file.pdf --page 5
 |---|---|
 | Drag | Select text; it is copied to the clipboard when you release |
 | Double-click | Select (and copy) a word |
-| Wheel | Scroll the page; flips pages at the top/bottom (or when the whole page is visible) |
+| Wheel / swipe up and down | Scroll the page; turns one page at the top/bottom (or when the whole page is visible) |
 | Ctrl + wheel | Zoom in/out around the mouse pointer |
-| Shift + wheel, horizontal wheel | Scroll left/right |
+| Swipe left / right (trackpad), Shift + wheel | Next / previous page (scrolls sideways first when the page is wider than the window) |
 | Right or middle drag | Move the page around |
 | Toolbar | ◀ ▶ previous/next page · page number: go to page · Ｉ/✋ switch between selecting text and moving the page · − ＋ zoom · Fit · Width · ✕ quit |
 
@@ -107,9 +107,9 @@ pdfterm ファイル.pdf
 |---|---|
 | ドラッグ | 文字を選択（離すと自動でコピー） |
 | ダブルクリック | 単語を選択してコピー |
-| ホイール | スクロール（ページの端やページ全体が見えているときはページ送り） |
+| ホイール / 上下スワイプ | スクロール（ページの端やページ全体が見えているときは1ページめくる） |
 | Ctrl + ホイール | マウスの位置を中心にズーム |
-| Shift + ホイール | 左右にスクロール |
+| 左右スワイプ（トラックパッド）、Shift + ホイール | 右→左で次のページ、左→右で前のページ（ページが横にはみ出しているときは、先に左右にスクロール） |
 | 右ドラッグ | ページを動かす |
 | 上のボタン | ◀ ▶ ページ送り · ページ番号を押すとページ指定 · Ｉ/✋ 文字選択と移動の切り替え · − ＋ ズーム · 全体 · 幅 · ✕ 閉じる |
 | v | 文字選択 / 移動 の切り替え（移動のときは、左ドラッグでページを動かし、ダブルクリックで拡大） |
