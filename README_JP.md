@@ -4,6 +4,8 @@
 
 ターミナルの中で動く、マウスで操作できるビューアーです。PDF、画像、Office 文書、テキスト、アニメーション、音つきの動画を、[kitty 画像方式](https://sw.kovidgoyal.net/kitty/graphics-protocol/)で本物の画像として表示します。スワイプでページをめくり、ドラッグで文字を選んでコピーし、ダブルクリックで拡大できます。
 
+![Ghostty の中で see が PDF・写真・GIF・動画を開いているところ](docs/demo.gif)
+
 ## 対応しているファイル
 
 - PDF、画像（Pillow で読めるもの。HEIC は Mac のみ）

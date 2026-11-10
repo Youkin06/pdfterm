@@ -7,6 +7,8 @@ animations and video (with sound) as real images through the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/): swipe to turn
 pages, drag to select and copy text, double-click to zoom.
 
+![see opening a PDF, a photo, a GIF and a video in Ghostty](docs/demo.gif)
+
 ## Supported files
 
 - PDF, images (anything [Pillow](https://python-pillow.org) reads; HEIC on macOS)

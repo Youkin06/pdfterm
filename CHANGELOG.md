@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A demo GIF at the top of the README (`docs/demo.gif`).
+
 ## 0.4.0 — 2026-11-10
 
 ### Added
