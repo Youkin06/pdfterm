@@ -33,6 +33,7 @@ ZOOM_SETTLE = 0.15  # seconds without zoom input before re-rendering sharply
 # outer terminal as raw RGBA and drop anything over their per-frame budget (~30 MB in
 # herdr 0.9), so the image would silently disappear. 4M pixels is ~21 MB as base64 RGBA.
 TILE_MAX_PX = 4_000_000
+RETIRE_DELAY = 0.5  # seconds an old image stays under the new one
 
 TEXT = {
     "en": {
@@ -90,13 +91,19 @@ def clip(s, w):
 class Tile:
     """A rendered region of one page, uploaded to the terminal as an image."""
 
-    def __init__(self, image_id, page, zoom, x, y, w, h):
-        self.image_id, self.page, self.zoom = image_id, page, zoom
+    def __init__(self, image_id, page, zoom, x, y, w, h, z=0):
+        self.image_id, self.page, self.zoom, self.z = image_id, page, zoom, z
         self.x, self.y, self.w, self.h = x, y, w, h  # page pixels at self.zoom
 
 
 class Renderer(threading.Thread):
-    """Renders tiles in the background so input handling never waits for PDFium."""
+    """Renders tiles in the background so input handling never waits for PDFium.
+
+    Finished tiles are kept in a small cache, and while idle the renderer prepares the
+    pages next to the current one so turning a page only has to send the image.
+    """
+
+    CACHE_SIZE = 8
 
     def __init__(self, doc):
         super().__init__(daemon=True)
@@ -104,10 +111,18 @@ class Renderer(threading.Thread):
         self.cond = threading.Condition()
         self.request = None
         self.result = None
+        self.prefetch = []  # requests to render while idle
+        self.cache = {}  # req -> (png, w, h), oldest first
 
-    def submit(self, req):
+    def submit(self, req, prefetch=()):
         with self.cond:
-            self.request = req
+            self.prefetch = [r for r in prefetch if r not in self.cache]
+            hit = self.cache.get(req)
+            if hit is not None:
+                self.request = None
+                self.result = (req,) + hit
+            else:
+                self.request = req
             self.cond.notify()
 
     def take(self):
@@ -115,19 +130,30 @@ class Renderer(threading.Thread):
             res, self.result = self.result, None
             return res
 
+    def _store(self, req, value):
+        self.cache.pop(req, None)
+        self.cache[req] = value
+        while len(self.cache) > self.CACHE_SIZE:
+            self.cache.pop(next(iter(self.cache)))
+
     def run(self):
         while True:
             with self.cond:
-                while self.request is None:
+                while self.request is None and not self.prefetch:
                     self.cond.wait()
-                req, self.request = self.request, None
-            page, zoom, x, y, w, h = req
+                if self.request is not None:
+                    req, wanted = self.request, True
+                    self.request = None
+                else:
+                    req, wanted = self.prefetch.pop(0), False
             try:
-                png, rw, rh = self.doc.render_tile(page, zoom, x, y, w, h)
+                value = self.doc.render_tile(*req)
             except Exception:
                 continue
             with self.cond:
-                self.result = (req, png, rw, rh)
+                self._store(req, value)
+                if wanted:
+                    self.result = (req,) + value
 
 
 class Viewer:
@@ -148,7 +174,9 @@ class Viewer:
         self.last_flip = 0.0
         self.last_zoom = 0.0
         self.edge_hits = 0
-        self.tile = None  # what the terminal currently holds
+        self.tile = None  # what the terminal currently shows
+        self.retired = []  # (delete_at, image_id): old images kept briefly to avoid flashes
+        self.z = 0
         self.pending = None  # request being rendered
         self.next_id = 1
         self.largest_tile = 0  # pixels; reported by PDFTERM_DEBUG
@@ -385,18 +413,54 @@ class Viewer:
         vx1, vy1 = min(self.sx + self.vw, W) * k, min(self.sy + self.vh, H) * k
         return t.x <= vx0 + 1 and t.y <= vy0 + 1 and vx1 - 1 <= t.x + t.w and vy1 - 1 <= t.y + t.h
 
+    def near_tile_edge(self):
+        """True when the view is close to an edge of a partial tile, so the next tile
+        should be rendered before the empty area comes into view."""
+        t = self.tile
+        k = t.zoom / self.zoom
+        W, H = self.page_px(t.zoom)
+        pad_x, pad_y = self.vw * k / 4, self.vh * k / 4
+        vx0, vy0 = self.sx * k, self.sy * k
+        vx1, vy1 = vx0 + self.vw * k, vy0 + self.vh * k
+        return (
+            (t.x > 0 and vx0 - t.x < pad_x)
+            or (t.y > 0 and vy0 - t.y < pad_y)
+            or (t.x + t.w < W - 1 and t.x + t.w - vx1 < pad_x)
+            or (t.y + t.h < H - 1 and t.y + t.h - vy1 < pad_y)
+        )
+
     def request_tile(self):
-        if self.tile_ok():
+        if self.tile_ok() and not self.near_tile_edge():
             return
         settling = time.time() - self.last_zoom < ZOOM_SETTLE
         same_page = self.tile is not None and self.tile.page == self.page
         if settling and same_page:
             return  # keep stretching the old tile while the wheel is still turning
+        if self.pending is not None and self.tile_ok():
+            return  # an edge prefetch is already on its way
         tz = self.tile_zoom()
         req = (self.page, tz) + self.wanted_tile(tz)
         if req != self.pending:
             self.pending = req
-            self.renderer.submit(req)
+            self.renderer.submit(req, self.neighbours(tz))
+
+    def neighbours(self, tz):
+        """Whole-page requests for the pages around the current one, for prerendering."""
+        out = []
+        for p in (self.page + 1, self.page - 1, self.page + 2):
+            if 0 <= p < len(self.doc):
+                pw, ph = self.doc.page_size(p)
+                if self.mode == "fit":
+                    z = min(self.vw / pw, self.vh / ph)
+                elif self.mode == "width":
+                    z = self.vw / pw
+                else:
+                    z = self.zoom
+                z *= tz / self.zoom
+                W, H = pw * z, ph * z
+                if W * H <= TILE_MAX_PX:
+                    out.append((p, z, 0, 0, int(W), int(H)))
+        return out
 
     def receive_tile(self):
         res = self.renderer.take()
@@ -409,20 +473,32 @@ class Viewer:
         old = self.tile
         image_id = self.next_id
         self.next_id = self.next_id % 1000 + 1
-        self.tile = Tile(image_id, req[0], req[1], req[2], req[3], w, h)
+        self.z += 1
+        self.tile = Tile(image_id, req[0], req[1], req[2], req[3], w, h, self.z)
         self.largest_tile = max(self.largest_tile, w * h)
         self.term.write(kitty_upload(png, image_id))
         self.placed = b""
         if self.place():
             if old is not None:
-                self.term.write(kitty_delete(old.image_id))
+                # The multiplexer may show the new image a frame later; deleting the old one
+                # right away would flash an empty screen. The new one is stacked on top.
+                self.retired.append((time.time() + RETIRE_DELAY, old.image_id))
         else:
-            # the view moved off the new tile while it was rendering: keep showing the old
-            # one rather than leaving the screen empty, and render again
+            # the view moved off the new tile while it was rendering: keep the old one
             self.term.write(kitty_delete(image_id))
             self.tile = old
             self.placed = b""
             self.place()
+
+    def drop_retired(self):
+        now = time.time()
+        keep = []
+        for at, image_id in self.retired:
+            if at <= now:
+                self.term.write(kitty_delete(image_id))
+            else:
+                keep.append((at, image_id))
+        self.retired = keep
 
     def place(self):
         """Show the current view from the uploaded tile (stretched if zoom differs).
@@ -466,7 +542,9 @@ class Viewer:
                 max(1, round((dx1 - col * self.cw) / self.cw)),
                 max(1, round((dy1 - row * self.ch) / self.ch)),
             )
-        seq = kitty_place(t.image_id, row + 2, col + 1, (sx0, sy0, sx1 - sx0, sy1 - sy0), offset, cells)
+        seq = kitty_place(
+            t.image_id, row + 2, col + 1, (sx0, sy0, sx1 - sx0, sy1 - sy0), offset, cells, t.z
+        )
         if seq != self.placed:
             self.term.write(seq)
             self.placed = seq
@@ -561,11 +639,16 @@ class Viewer:
                 self.chrome, self.placed = "", b""
                 self.dirty = True
             self.receive_tile()
+            self.drop_retired()
             if self.dirty:
                 self.draw()
             else:
                 self.request_tile()  # picks up a finished zoom gesture
-            busy = self.pending is not None or time.time() - self.last_zoom < ZOOM_SETTLE * 2
+            busy = (
+                self.pending is not None
+                or bool(self.retired)
+                or time.time() - self.last_zoom < ZOOM_SETTLE * 2
+            )
             for ev in self.term.read_events(timeout=0.01 if busy else 0.1):
                 self.handle(ev)
                 if not self.running:

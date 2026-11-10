@@ -77,16 +77,16 @@ def kitty_upload(png, image_id):
     return b"".join(out)
 
 
-def kitty_place(image_id, row, col, src, offset=(0, 0), cells=None):
+def kitty_place(image_id, row, col, src, offset=(0, 0), cells=None, z=0):
     """Show the `src` rectangle (x, y, w, h in image pixels) of an uploaded image.
 
     The placement starts at cell (row, col), shifted by `offset` pixels inside that cell.
     With `cells` (cols, rows) the source is stretched over that many cells; otherwise it is
     shown at its natural pixel size. Re-placing replaces the previous placement in place,
-    which makes panning cheap: no image data is sent again.
+    which makes panning cheap: no image data is sent again. Higher `z` draws on top.
     """
     x, y, w, h = (max(0, int(round(v))) for v in src)
-    keys = f"a=p,i={image_id},p=1,x={x},y={y},w={max(1, w)},h={max(1, h)},X={offset[0]},Y={offset[1]},C=1,q=2"
+    keys = f"a=p,i={image_id},p=1,x={x},y={y},w={max(1, w)},h={max(1, h)},X={offset[0]},Y={offset[1]},z={z},C=1,q=2"
     if cells:
         keys += f",c={max(1, cells[0])},r={max(1, cells[1])}"
     return f"\x1b[{row};{col}H\x1b_G{keys}\x1b\\".encode()
