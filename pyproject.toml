@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdfterm"
-version = "0.1.0"
-description = "A mouse-friendly PDF viewer for terminals that support the kitty graphics protocol (Ghostty, kitty, WezTerm)"
+version = "0.2.0"
+description = "A mouse- and trackpad-friendly PDF viewer for terminals with the kitty graphics protocol (Ghostty, kitty, WezTerm)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
