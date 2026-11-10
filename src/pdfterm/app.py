@@ -55,16 +55,12 @@ TEXT = {
         "fit": "Fit",
         "width": "Width",
         "quit": "Quit",
-        "goto": "Go to page: ",
-        "bad_page": "No such page",
         "copied": "Copied {n} characters",
     },
     "ja": {
         "fit": "全体",
         "width": "幅",
         "quit": "閉じる",
-        "goto": "ページ番号: ",
-        "bad_page": "そのページはありません",
         "copied": "{n}文字をコピーしました",
     },
 }
@@ -214,7 +210,6 @@ class Viewer:
         self.zoom = 1.0
         self.sx = self.sy = 0.0  # viewport top-left in page pixels at self.zoom
         self.buttons = []  # (x0, x1, action) on the toolbar row
-        self.prompt = None  # text typed for "go to page", or None
         self.message = ""
         self.message_until = 0.0
         self.tool = "select"  # left drag: "select" text or "hand" (move the page)
@@ -405,22 +400,6 @@ class Viewer:
             self.on_key(ev)
 
     def on_key(self, k):
-        if self.prompt is not None:
-            if k.name == "char" and k.char.isdigit():
-                self.prompt += k.char
-            elif k.name == "backspace":
-                self.prompt = self.prompt[:-1]
-            elif k.name == "enter":
-                text, self.prompt = self.prompt, None
-                if text.isdigit() and 1 <= int(text) <= len(self.doc):
-                    self.go(int(text) - 1)
-                elif text:
-                    self.message = self.t["bad_page"]
-            elif k.name in ("esc", "ctrl-c"):
-                self.prompt = None
-            self.dirty = True
-            return
-
         step_y = self.ch * 3
         c = k.char if k.name == "char" else ""
         alt = k.char if k.name == "alt" else ""
@@ -457,9 +436,6 @@ class Viewer:
             self.set_mode("fit")
         elif c == "w":
             self.set_mode("width")
-        elif c == "g":
-            self.prompt = ""
-            self.dirty = True
 
     def on_mouse(self, m):
         px, py = m.px, m.py - self.ch  # pointer in viewport pixels
@@ -803,11 +779,11 @@ class Viewer:
 
         # drop the least important parts until the bar fits the pane width
         layouts = [
-            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit, wide], quit_long),
-            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit, wide], quit_short),
-            ([prev, nxt, (page, self.start_prompt), out_, level, in_, fit], quit_short),
-            ([prev, nxt, (page, self.start_prompt), out_, in_, fit], quit_short),
-            ([prev, nxt, (page, self.start_prompt), out_, in_], quit_short),
+            ([prev, nxt, (page, None), out_, level, in_, fit, wide], quit_long),
+            ([prev, nxt, (page, None), out_, level, in_, fit, wide], quit_short),
+            ([prev, nxt, (page, None), out_, level, in_, fit], quit_short),
+            ([prev, nxt, (page, None), out_, in_, fit], quit_short),
+            ([prev, nxt, (page, None), out_, in_], quit_short),
         ]
         for items, right in layouts:
             need = sum(width(i[0]) + 1 for i in items) + width(right[0])
@@ -838,9 +814,7 @@ class Viewer:
         return "\x1b[1;1H\x1b[2K" + "".join(out)
 
     def status(self):
-        if self.prompt is not None:
-            text = f"\x1b[1m{self.t['goto']}{self.prompt}\x1b[0m▏"
-        elif self.message and time.time() < self.message_until:
+        if self.message and time.time() < self.message_until:
             text = f"\x1b[33m{clip(self.message, self.cols - 1)}\x1b[0m"
         else:
             text = "\x1b[2mq: quit\x1b[0m"
@@ -857,9 +831,6 @@ class Viewer:
         self.dirty = False
 
     # --- actions ----------------------------------------------------------
-
-    def start_prompt(self):
-        self.prompt = ""
 
     def quit(self):
         self.running = False
