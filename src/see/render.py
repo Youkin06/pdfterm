@@ -23,7 +23,9 @@ def open_document(path):
         head = f.read(1024)
     if b"%PDF-" in head:
         return Document(path)
-    return ImageDocument(path)
+    from .anim import open_animated  # animated GIF, APNG and WebP
+
+    return open_animated(path) or ImageDocument(path)
 
 
 class Document:
