@@ -692,6 +692,6 @@ def play(path):
                     f"video {info.width}x{info.height} decode={getattr(player, 'dec_w', 0)}x"
                     f"{getattr(player, 'dec_h', 0)} fps={player.fps:.3g} "
                     f"shown={player.frames_shown} dropped={player.dropped} "
-                    f"bytes={term.bytes_written}\n"
+                    f"bytes={term.bytes_written} cell={term.cell} pixel_mouse={term.pixel_mouse}\n"
                 )
     return 0
