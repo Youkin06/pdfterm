@@ -55,3 +55,14 @@ def test_tiles_stay_within_the_graphics_budget(pdf3, fake_term):
     tz = v.tile_zoom()
     x, y, w, h = v.wanted_tile(tz)
     assert w * h <= TILE_MAX_PX
+
+
+def test_drag_on_blank_paper_moves_a_zoomed_page(pdf3, fake_term):
+    v, _ = make_viewer(pdf3, fake_term)
+    v.toggle_zoom(200, 300)
+    sx, sy = v.sx, v.sy
+    v.on_mouse(Mouse(0, 20, 20, True, 200.0, 400.0))
+    v.on_mouse(Mouse(0, 15, 17, True, 140.0, 340.0, motion=True))
+    v.on_mouse(Mouse(0, 15, 17, False, 140.0, 340.0))
+    assert v.selecting is None
+    assert (v.sx, v.sy) == (sx + 60, sy + 60)

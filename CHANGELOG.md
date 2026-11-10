@@ -9,6 +9,10 @@
 - A demo GIF at the top of the README (`docs/demo.gif`): a blue gradient background,
   sample files in one matching palette, ending on a `❯see` prompt.
 
+### Changed
+- PDF and documents: a left drag that starts on blank paper moves the page (handy when
+  zoomed in); a drag that starts on text still selects and copies it, as in Preview.
+
 ## 0.4.0 — 2026-11-10
 
 ### Added
