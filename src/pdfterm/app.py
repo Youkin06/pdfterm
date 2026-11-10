@@ -732,8 +732,6 @@ class Viewer:
     def toolbar(self):
         pct = round(self.zoom * 72 / 96 * 100)  # 100% = 96 dpi on screen
         page = (f" {self.page + 1}/{len(self.doc)} ", None)
-        out_ = (" − ", lambda: self.zoom_at(1 / ZOOM_STEP ** 2))
-        in_ = (" ＋ ", lambda: self.zoom_at(ZOOM_STEP ** 2))
         level = (f" {pct}% ", None)
         fit = (" Fit ", lambda: self.set_mode("fit"), "fit")
         wide = (" Width ", lambda: self.set_mode("width"), "width")
@@ -741,10 +739,10 @@ class Viewer:
 
         # drop the least important parts until the bar fits the pane width
         layouts = [
-            [page, out_, level, in_, fit, wide],
-            [page, out_, level, in_, fit],
-            [page, out_, in_, fit],
-            [page, out_, in_],
+            [page, level, fit, wide],
+            [page, level, fit],
+            [page, fit],
+            [page],
         ]
         for items in layouts:
             if sum(width(i[0]) + 1 for i in items) + width(close) <= self.cols:
@@ -758,8 +756,9 @@ class Viewer:
             if action is None:
                 out.append(f"\x1b[0;2m{label}\x1b[0m ")
             else:
+                # no backgrounds: the current mode is bold and underlined
                 active = len(item) > 2 and item[2] == self.mode
-                style = "\x1b[0;30;46m" if active else "\x1b[0;97;100m"
+                style = "\x1b[0;1;4m" if active else "\x1b[0m"
                 out.append(f"{style}{label}\x1b[0m ")
                 self.buttons.append((x, x + w - 1, action))
             x += w + 1

@@ -8,7 +8,7 @@ Ctrl+wheel, and click the toolbar buttons.
 ターミナルの中で動く、マウスで操作できる PDF ビューアーです。（日本語の説明は下にあります）
 
 ```
- 1/3   −   78%   ＋   Fit   Width   report.pdf                       ✕
+ 1/3   78%   Fit   Width   report.pdf                                   ✕
 ┌──────────────────────────────────────────────────────────────────┐
 │                         (the PDF page)                           │
 └──────────────────────────────────────────────────────────────────┘
@@ -48,7 +48,7 @@ pdfterm file.pdf --page 5
 | Ctrl + wheel | Zoom in/out around the mouse pointer |
 | Swipe left / right (trackpad), Shift + wheel | Next / previous page (scrolls sideways first when the page is wider than the window) |
 | Right or middle drag | Move the page around |
-| Toolbar | − ＋ zoom · Fit (whole page) · Width (fit width) · ✕ quit |
+| Toolbar | Fit (whole page) · Width (fit width) · ✕ quit |
 
 Press `v` to make the left drag move the page instead of selecting text; press `v` again to
 go back. (Trackpad pinch gestures are not passed to terminal programs, so zoom with a
@@ -108,7 +108,7 @@ pdfterm ファイル.pdf
 | Ctrl + ホイール | マウスの位置を中心にズーム |
 | 左右スワイプ（トラックパッド）、Shift + ホイール | 右→左で次のページ、左→右で前のページ（ページが横にはみ出しているときは、先に左右にスクロール） |
 | 右ドラッグ | ページを動かす |
-| 上のボタン | − ＋ ズーム · Fit（ページ全体） · Width（幅に合わせる） · ✕ 閉じる |
+| 上のボタン | Fit（ページ全体） · Width（幅に合わせる） · ✕ 閉じる |
 | v | 文字選択 / 移動 の切り替え（移動のときは、左ドラッグでページを動かし、ダブルクリックで拡大） |
 | q | 終了 |
 
