@@ -347,6 +347,8 @@ class Player:
         self.scrub = None  # position under the pointer while dragging on the bar
         self.bar = None  # (x0, cells) of the seek bar on the bottom row
         self.icon = None  # (x0, x1) of the play/pause icon
+        self.mute_btn = None  # (x0, x1) of the sound on/off button at the bottom right
+        self.muted = False
         self.close_x = 0
         self.chrome = ""
         self.message = ""
@@ -393,7 +395,7 @@ class Player:
 
     def start_audio(self):
         self.stop_audio()
-        if self.info.has_audio and self.ffplay and self.playing:
+        if self.info.has_audio and self.ffplay and self.playing and not self.muted:
             if not self.duration or self.pos0 < self.duration - 0.05:
                 self.audio = Audio(self.ffplay, self.path, self.pos0, self.info.start)
                 self.audio_since = self.clock()
@@ -430,6 +432,18 @@ class Player:
 
     def toggle(self):
         self.pause() if self.playing else self.play()
+
+    def toggle_mute(self):
+        """Sound on/off. Muted, the sound process is stopped and the picture keeps its own
+        clock; unmuted, the sound starts again from the current position."""
+        if not (self.info.has_audio and self.ffplay):
+            return
+        self.pos0, self.t0 = self.position(), self.clock()
+        self.muted = not self.muted
+        if self.muted:
+            self.stop_audio()
+        elif self.playing and not self.wait_frame:
+            self.start_audio()
 
     def seek(self, pos):
         if self.duration:
@@ -562,16 +576,23 @@ class Player:
         times = now + (f" / {total}" if total else "")
         left = f" {icon} {times}  "
         self.icon = (2, 1 + width(icon))
-        cells = self.cols - width(left) - 1
+        # sound on/off at the bottom right: 🔊 / 🔇 are a matching emoji pair (2 columns each)
+        sound = ""
+        self.mute_btn = None
+        if self.info.has_audio and self.ffplay:
+            sound = "  " + ("🔇" if self.muted else "🔊") + " "
+            self.mute_btn = (self.cols - width(sound) + 3, self.cols - 1)
+        cells = self.cols - width(left) - width(sound) - 1
         if not self.duration or cells < 5:
             self.bar = None
-            return row + clip(left, self.cols)
+            line = clip(left, self.cols - width(sound))
+            return row + line + (f"\x1b[{self.rows};{self.cols - width(sound) + 1}H{sound}" if sound else "")
         frac = min(1.0, max(0.0, p / self.duration))
         k = round(frac * (cells - 1))
         self.bar = (width(left) + 1, cells)
         return (
             row + left
-            + "━" * k + "●" + "\x1b[2m" + "─" * (cells - 1 - k) + "\x1b[0m"
+            + "━" * k + "●" + "\x1b[2m" + "─" * (cells - 1 - k) + "\x1b[0m" + sound
         )
 
     def draw(self):
@@ -593,6 +614,8 @@ class Player:
             self.quit()
         elif c == " ":
             self.toggle()
+        elif c == "m":
+            self.toggle_mute()
         elif k.name == "right":
             self.seek(self.position() + SEEK_STEP)
         elif k.name == "left":
@@ -616,6 +639,8 @@ class Player:
         elif m.y == self.rows:
             if self.icon and self.icon[0] - 1 <= m.x <= self.icon[1] + 1:
                 self.toggle()
+            elif self.mute_btn and self.mute_btn[0] - 1 <= m.x <= self.mute_btn[1] + 1:
+                self.toggle_mute()
             elif self.bar and m.x >= self.bar[0] - 1:
                 self.scrub = self.bar_position(m)
         else:
