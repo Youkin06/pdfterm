@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+- In terminals without the kitty graphics protocol (e.g. macOS Terminal.app) see now says so
+  and exits, instead of showing a blank or garbled screen. `SEE_FORCE_GRAPHICS=1` skips the check.
+
 ### Added
 - Install with Homebrew: `brew install youkin06/tap/see` (tap: https://github.com/Youkin06/homebrew-tap).
 

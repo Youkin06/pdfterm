@@ -17,6 +17,7 @@ import zlib
 from . import __version__
 from .render import Image, UnsupportedFile, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload, open_document
 from .term import (
+    NO_GRAPHICS,
     WHEEL_DOWN,
     WHEEL_LEFT,
     WHEEL_RIGHT,
@@ -893,6 +894,9 @@ def main(argv=None):
     viewer.page = min(max(args.page - 1, 0), len(viewer.doc) - 1)
 
     term.enter()
+    if not term.graphics:
+        term.leave()
+        parser.exit(1, NO_GRAPHICS)
     try:
         viewer.run()
     except KeyboardInterrupt:
