@@ -43,7 +43,7 @@ can open.
   [WezTerm](https://wezterm.org). It also works inside [herdr](https://herdr.dev) panes.
   see checks this when it starts; in other terminals (such as macOS Terminal.app) it says so
   and exits instead of drawing garbage. `SEE_FORCE_GRAPHICS=1` skips the check.
-- Python 3.9 or newer
+- Python 3.10 or newer
 - Optional: [LibreOffice](https://www.libreoffice.org) for the most faithful Office documents
   (and to open them at all outside macOS). see finds `soffice` on the `PATH` or in
   `/Applications/LibreOffice.app`.
@@ -273,7 +273,7 @@ MIT
 ### 必要なもの
 
 - kitty 画像方式に対応したターミナル（Ghostty、kitty、WezTerm など）。herdr のペインの中でも使えます。起動時に確認し、対応していないターミナル（Mac 標準のターミナル.app など）では、その旨を表示して終了します。
-- Python 3.9 以上
+- Python 3.10 以上
 - （任意）LibreOffice：Office 文書をいちばん忠実に表示できます。Mac 以外で Office 文書を開くには必要です。
 - 動画を見るときは ffmpeg（`ffmpeg` と `ffprobe`、音を出すには `ffplay`）。`brew install ffmpeg` などで入れてください。PDF と画像には不要です。
 

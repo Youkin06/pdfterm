@@ -8,7 +8,7 @@ version = "0.3.0"
 description = "see: a mouse- and trackpad-friendly viewer for the terminal (kitty graphics protocol: Ghostty, kitty, WezTerm). Opens PDFs, images, Office documents, text, animations and video."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["pypdfium2>=4.0", "Pillow>=10.0"]
 keywords = ["pdf", "viewer", "terminal", "kitty", "ghostty", "tui"]
 classifiers = [

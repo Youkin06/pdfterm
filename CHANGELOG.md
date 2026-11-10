@@ -5,7 +5,11 @@
 ### Added
 - Automated tests (input parsing, file-type detection, swipes, zoom, tile budget, video
   detection, the command line) and GitHub Actions running them on macOS and Linux with
-  Python 3.9 and 3.13.
+  Python 3.10 and 3.13.
+
+### Changed
+- Python 3.10 or newer is required (3.9 has reached its end of life and is no longer
+  available on current CI runners).
 
 ### Fixed
 - In terminals without the kitty graphics protocol (e.g. macOS Terminal.app) see now says so
