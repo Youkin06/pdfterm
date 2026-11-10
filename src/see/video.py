@@ -21,7 +21,8 @@ import time
 import unicodedata
 import zlib
 
-from .render import Image, kitty_delete, kitty_place, kitty_upload
+from .icons import sound_icon
+from .render import Image, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload
 from .term import NO_GRAPHICS, Key, Mouse, Terminal
 
 VIDEO_EXTS = {
@@ -43,6 +44,7 @@ QUEUE = 4  # decoded frames waiting to be shown
 SEEK_STEP = 5.0
 AUDIO_WAIT = 1.0  # seconds the picture waits for the sound to start before running alone
 SYNC_TOLERANCE = 0.04  # seconds the picture may drift from the sound before it is corrected
+SOUND_ICON_IDS = {"on": 9101, "off": 9102, "none": 9103}  # kitty image ids of the speaker icons
 REPORT_FRESH = 0.5  # seconds a clock report from ffplay stays usable
 MESSAGE_SECONDS = 3.0
 IDS = (1, 2)
@@ -348,6 +350,8 @@ class Player:
         self.bar = None  # (x0, cells) of the seek bar on the bottom row
         self.icon = None  # (x0, x1) of the play/pause icon
         self.mute_btn = None  # (x0, x1) of the sound on/off button at the bottom right
+        self.sound_icons = None  # cell size the sound icons were uploaded for
+        self.sound_placed = None  # (state, row, col) of the icon on screen
         self.muted = False
         self.close_x = 0
         self.chrome = ""
@@ -436,12 +440,8 @@ class Player:
     def toggle_mute(self):
         """Sound on/off. Muted, the sound process is stopped and the picture keeps its own
         clock; unmuted, the sound starts again from the current position."""
-        if not self.info.has_audio:
-            self.flash("This video has no sound")
-            return
-        if not self.ffplay:
-            self.flash("No sound: ffplay was not found")
-            return
+        if not (self.info.has_audio and self.ffplay):
+            return  # nothing to turn on
         self.pos0, self.t0 = self.position(), self.clock()
         self.muted = not self.muted
         if self.muted:
@@ -566,7 +566,7 @@ class Player:
     def status(self):
         row = f"\x1b[{self.rows};1H\x1b[2K"
         if self.message and time.time() < self.message_until:
-            self.bar = self.icon = None
+            self.bar = self.icon = self.mute_btn = None
             return row + f"\x1b[33m {clip(self.message, self.cols - 2)}\x1b[0m"
         p = self.scrub if self.scrub is not None else self.position()
         # Like YouTube, the icon is the button: ⏸ (pause) while playing, ⏵ (play) while
@@ -580,11 +580,9 @@ class Player:
         times = now + (f" / {total}" if total else "")
         left = f" {icon} {times}  "
         self.icon = (2, 1 + width(icon))
-        # sound on/off at the bottom right: 🔊 / 🔇 are a matching emoji pair (2 columns each).
-        # Always shown, so it is clear where it is; dimmed when the video has no sound.
-        audible = self.info.has_audio and self.ffplay
-        icon_s = "🔇" if self.muted or not audible else "🔊"
-        sound = "  " + (icon_s if audible else f"\x1b[2m{icon_s}\x1b[0m") + " "
+        # sound on/off at the bottom right: a white line icon drawn as an image over these
+        # blank cells (see draw_sound_icon), dimmed when the video has no sound
+        sound = " " * 5
         sound_w = 5
         self.mute_btn = (self.cols - sound_w + 3, self.cols - 1)
         cells = self.cols - width(left) - sound_w - 1
@@ -605,6 +603,32 @@ class Player:
         if chrome != self.chrome:
             self.term.write(chrome)
             self.chrome = chrome
+        self.draw_sound_icon()
+
+    def draw_sound_icon(self):
+        """Show the speaker icon (an image) in the two cells of the sound button."""
+        if not self.mute_btn:
+            if self.sound_placed:
+                self.term.write(b"".join(kitty_unplace_all(i) for i in SOUND_ICON_IDS.values()))
+                self.sound_placed = None
+            return
+        if self.sound_icons != (self.cw, self.ch):
+            self.term.write(b"".join(
+                kitty_upload(sound_icon(state, 2 * self.cw, self.ch), iid)
+                for state, iid in SOUND_ICON_IDS.items()
+            ))
+            self.sound_icons, self.sound_placed = (self.cw, self.ch), None
+        audible = self.info.has_audio and self.ffplay
+        state = "none" if not audible else ("off" if self.muted else "on")
+        where = (state, self.rows, self.mute_btn[0])
+        if where == self.sound_placed:
+            return
+        self.term.write(
+            b"".join(kitty_unplace_all(i) for i in SOUND_ICON_IDS.values())
+            + kitty_place(SOUND_ICON_IDS[state], self.rows, self.mute_btn[0],
+                          (0, 0, 2 * self.cw, self.ch), cells=(2, 1), z=10)
+        )
+        self.sound_placed = where
 
     # --- input -------------------------------------------------------------
 
