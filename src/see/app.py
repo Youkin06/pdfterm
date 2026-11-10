@@ -433,9 +433,11 @@ class Viewer:
                 return
             if not in_view:
                 return
-            if m.button == 0 and self.tool == "select":
-                self.selecting = (px, py, self.char_at(px, py), False)
-            else:  # hand tool, or middle/right drag in either tool
+            # like Preview: a press on text selects it, a press on blank paper moves the page
+            anchor = self.char_at(px, py) if m.button == 0 and self.tool == "select" else None
+            if anchor is not None:
+                self.selecting = (px, py, anchor, False)
+            else:  # blank paper, hand tool, or middle/right drag in either tool
                 self.drag = (m.px, m.py, self.sx, self.sy, False)
             return
 

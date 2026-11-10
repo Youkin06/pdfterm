@@ -44,7 +44,7 @@ see movie.mp4
 |---|---|
 | Swipe left / right, ← / →, Space | Next / previous page |
 | Wheel, ↑ / ↓ | Scroll |
-| Drag | Select and copy text (images: move) |
+| Drag | On text: select and copy it. Elsewhere (and on images): move the page |
 | Double-click, Ctrl + wheel, + / − | Zoom |
 | 0 / f, w | Fit page, fit width |
 | q | Quit |
