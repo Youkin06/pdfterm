@@ -29,7 +29,7 @@ ZOOM_STEP = 1.1
 ZOOM_MIN_FACTOR = 0.25  # relative to fit-page
 ZOOM_MAX = 16.0  # pixels per point
 DOUBLE_CLICK = 0.4
-FLIP_COOLDOWN = 0.3
+WHEEL_GESTURE_GAP = 0.3  # seconds of wheel silence that end a scroll gesture
 EDGE_HITS_TO_FLIP = 3
 ZOOM_SETTLE = 0.15  # seconds without zoom input before re-rendering sharply
 # Upper bound for one uploaded image. Multiplexers such as herdr re-send images to the
@@ -232,7 +232,8 @@ class Viewer:
         self.highlight = b""
         self.highlight_sent = False  # the translucent image is uploaded on first use
         self.last_click = (0.0, 0, 0)
-        self.last_flip = 0.0
+        self.last_wheel = 0.0
+        self.flipped_this_gesture = False
         self.last_zoom = 0.0
         self.edge_hits = 0
         self.tile = None  # what the terminal currently shows
@@ -311,20 +312,33 @@ class Viewer:
 
     # --- scrolling --------------------------------------------------------
 
-    def scroll_y(self, dy):
-        W, H = self.page_px()
+    def scroll_y(self, dy, wheel=False):
+        """Scroll vertically; at the page edge (or when the page fits) turn the page.
+
+        Wheel input turns at most one page per gesture: trackpads keep sending events
+        after the fingers lift (momentum), which would otherwise flip several pages.
+        A gesture ends once the wheel has been quiet for WHEEL_GESTURE_GAP seconds.
+        """
         now = time.time()
-        if H <= self.vh + 1:  # whole page visible: wheel flips pages
-            if now - self.last_flip > FLIP_COOLDOWN:
-                self.last_flip = now
-                self.go(self.page + (1 if dy > 0 else -1), at_bottom=dy < 0)
-            return
+        if wheel:
+            if now - self.last_wheel > WHEEL_GESTURE_GAP:
+                self.flipped_this_gesture = False
+                self.edge_hits = 0
+            self.last_wheel = now
+            if self.flipped_this_gesture:
+                return  # swallow the rest of the gesture after a page turn
+        W, H = self.page_px()
+        fits = H <= self.vh + 1
         at_edge = (dy > 0 and self.sy >= H - self.vh - 1) or (dy < 0 and self.sy <= 1)
-        if at_edge:
-            self.edge_hits += 1
-            if self.edge_hits >= EDGE_HITS_TO_FLIP and now - self.last_flip > FLIP_COOLDOWN:
-                self.last_flip = now
-                self.go(self.page + (1 if dy > 0 else -1), at_bottom=dy < 0)
+        if fits or at_edge:
+            if not fits:
+                self.edge_hits += 1  # a little resistance before leaving a zoomed page
+                if self.edge_hits < EDGE_HITS_TO_FLIP:
+                    return
+            target = self.page + (1 if dy > 0 else -1)
+            if 0 <= target < len(self.doc):
+                self.go(target, at_bottom=dy < 0)
+                self.flipped_this_gesture = wheel
             return
         self.edge_hits = 0
         self.sy += dy
@@ -415,7 +429,7 @@ class Viewer:
                 left = up or m.button == WHEEL_LEFT
                 self.scroll_x(-self.cw * 3 if left else self.cw * 3)
             else:
-                self.scroll_y(-self.ch * 2 if up else self.ch * 2)
+                self.scroll_y(-self.ch * 2 if up else self.ch * 2, wheel=True)
             return
 
         if m.pressed and not m.motion and m.button in (0, 1, 2):
