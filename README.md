@@ -109,8 +109,9 @@ them as copy and as "select the whole page".
  ▶ 0:42 / 3:10  ━━━━━━━━━━━━●──────────────────────────────────────────
 ```
 
-A video starts playing at once, with its sound. The bottom line shows ⏵ while playing (⏸
-when paused), the current time / the length, and a seek bar.
+A video starts playing at once, with its sound. The bottom line shows a play/pause button that
+works like YouTube's (⏸ while playing, ⏵ when paused), the current time / the length, and a
+seek bar.
 
 | Action | Effect |
 |---|---|
@@ -257,7 +258,7 @@ see 動画.mp4             # 動画を再生
 
 **動画**
 
-開くとすぐに音声つきで再生が始まります。下の行には、再生中は ⏵（一時停止中は ⏸）、今の時間 / 全体の長さ、シークバーが出ます。
+開くとすぐに音声つきで再生が始まります。下の行には、YouTube と同じ再生 / 一時停止ボタン（再生中は ⏸、一時停止中は ⏵）、今の時間 / 全体の長さ、シークバーが出ます。
 
 | 操作 | 動き |
 |---|---|
