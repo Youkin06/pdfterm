@@ -551,10 +551,10 @@ class Player:
             self.bar = self.icon = None
             return row + f"\x1b[33m {clip(self.message, self.cols - 2)}\x1b[0m"
         p = self.scrub if self.scrub is not None else self.position()
-        # Both icons come from the same Unicode block (Geometric Shapes) so they are drawn
-        # with the same font and size, and both take exactly two columns, so the time and
-        # the seek bar never shift when playback is toggled.
-        icon = "▶ " if self.playing else "▮▮"
+        # ⏵ and ⏸ are a matched pair of media-control symbols (U+23F5 / U+23F8), so they are
+        # drawn at the same size; each is padded to two columns so the time and the seek bar
+        # never shift when playback is toggled. (Both default to text, not emoji, style.)
+        icon = "⏵ " if self.playing else "⏸ "
         long = self.duration >= 3600
         total = fmt_time(self.duration, long) if self.duration else ""
         now = fmt_time(p, long).rjust(len(total))  # fixed width as the time grows
