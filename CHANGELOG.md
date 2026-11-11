@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- Web pages: `see https://…` loads the page in WebKit as a 1200-point-wide browser window
+  and shows all of it as one tall page (screen look, not print style), opened at full width
+  and scrolled with the trackpad. Text can be selected and copied. macOS only; links can't
+  be followed yet.
+
 ### Changed
 - `scripts/release.sh X.Y.Z "Name"` also publishes a GitHub release titled
   `see X.Y.Z — Name`, with that version's CHANGELOG section as its notes
