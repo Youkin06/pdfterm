@@ -440,6 +440,8 @@ class Viewer:
                 return
             # like Preview: a press on text selects it, a press on blank paper moves the page
             anchor = self.char_at(px, py) if m.button == 0 and self.tool == "select" else None
+            if m.button == 0:  # any left click, on text or blank paper, drops the old selection
+                self.set_selection(None)
             if anchor is not None:
                 self.selecting = (px, py, anchor, False)
             else:  # blank paper, hand tool, or middle/right drag in either tool

@@ -66,3 +66,11 @@ def test_drag_on_blank_paper_moves_a_zoomed_page(pdf3, fake_term):
     v.on_mouse(Mouse(0, 15, 17, False, 140.0, 340.0))
     assert v.selecting is None
     assert (v.sx, v.sy) == (sx + 60, sy + 60)
+
+
+def test_click_on_blank_paper_clears_the_selection(pdf3, fake_term):
+    v, _ = make_viewer(pdf3, fake_term)
+    v.sel = (0, 0, 5)
+    v.on_mouse(Mouse(0, 20, 20, True, 200.0, 400.0))
+    v.on_mouse(Mouse(0, 20, 20, False, 200.0, 400.0))
+    assert v.sel is None
