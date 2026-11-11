@@ -25,6 +25,7 @@ from .term import (
     Key,
     Mouse,
     Terminal,
+    outer_terminal_hint,
 )
 
 ZOOM_STEP = 1.1
@@ -49,6 +50,7 @@ HIGHLIGHT_ID = 9999
 HIGHLIGHT_W, HIGHLIGHT_H = 2048, 256
 HIGHLIGHT_RGBA = (64, 128, 255, 110)
 HIGHLIGHT_Z = 1 << 30
+HINT_SECONDS = 10.0  # how long the "outer terminal" hint stays on the bottom line
 MESSAGE_SECONDS = 2.5  # seconds an old image stays under the new one
 
 def width(s):
@@ -899,6 +901,10 @@ def main(argv=None):
     if not term.graphics:
         term.leave()
         parser.exit(1, NO_GRAPHICS)
+    hint = outer_terminal_hint()
+    if hint:
+        viewer.flash(hint)
+        viewer.message_until = time.time() + HINT_SECONDS
     try:
         viewer.run()
     except KeyboardInterrupt:

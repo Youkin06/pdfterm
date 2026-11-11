@@ -18,6 +18,7 @@
 ## 必要なもの
 
 - kitty 画像方式に対応したターミナル（Ghostty、kitty、WezTerm。その中の herdr のペインでも可）
+  - herdr だけでは足りません。外側が Terminal.app・iTerm2・VS Code などだと画面が空白になります（そのときは下の行に案内が出ます）
 - Python 3.10 以上
 - 任意：Office 文書には LibreOffice、動画には ffmpeg
 

@@ -23,7 +23,7 @@ import zlib
 
 from .icons import sound_icon
 from .render import Image, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload
-from .term import NO_GRAPHICS, Key, Mouse, Terminal
+from .term import NO_GRAPHICS, Key, Mouse, Terminal, outer_terminal_hint
 
 VIDEO_EXTS = {
     ".mp4", ".m4v", ".mov", ".qt", ".mkv", ".webm", ".avi", ".wmv", ".flv", ".mpg", ".mpeg",
@@ -47,6 +47,7 @@ SYNC_TOLERANCE = 0.04  # seconds the picture may drift from the sound before it 
 SOUND_ICON_IDS = {"on": 9101, "off": 9102, "none": 9103}  # kitty image ids of the speaker icons
 REPORT_FRESH = 0.5  # seconds a clock report from ffplay stays usable
 MESSAGE_SECONDS = 3.0
+HINT_SECONDS = 10.0  # how long the "outer terminal" hint stays on the bottom line
 IDS = (1, 2)
 
 
@@ -743,6 +744,10 @@ def play(path):
             entered = False
             sys.stderr.write(NO_GRAPHICS)
             sys.exit(1)
+        hint = outer_terminal_hint()
+        if hint:
+            player.flash(hint)
+            player.message_until = time.time() + HINT_SECONDS
         player.run()
     except KeyboardInterrupt:
         pass
