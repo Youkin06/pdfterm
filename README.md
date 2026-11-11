@@ -63,7 +63,7 @@ python3 -m venv .venv
 .venv/bin/pytest -q
 ```
 
-Release with `scripts/release.sh X.Y.Z`. See [CHANGELOG.md](CHANGELOG.md) for the history.
+Release with `scripts/release.sh X.Y.Z "Release name"` (tag, GitHub release and Homebrew formula). See [CHANGELOG.md](CHANGELOG.md) for the history.
 
 ## License
 
