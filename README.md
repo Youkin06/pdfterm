@@ -15,6 +15,7 @@ pages, drag to select and copy text, double-click to zoom.
 - Text, Markdown, source code, JSON, CSV / TSV
 - Word, Excel, PowerPoint, Keynote, Numbers, Pages, RTF, OpenDocument (with LibreOffice, or on macOS without it)
 - HTML, SVG (macOS)
+- Web pages: `see https://…` shows the whole page as one long page, scrolled with the trackpad (macOS)
 - Animated GIF, APNG, WebP
 - Video: MP4, MOV, MKV, WebM, AVI, … (needs [ffmpeg](https://ffmpeg.org))
 
@@ -40,6 +41,7 @@ or `pipx install git+https://github.com/Youkin06/see`.
 see file.pdf
 see file.pdf --page 5
 see movie.mp4
+see https://en.wikipedia.org/wiki/Terminal_emulator
 ```
 
 | Mouse / key | Effect |

@@ -310,6 +310,34 @@ def _merge(paths, out):
     merged.close()
 
 
+# --- web pages ---------------------------------------------------------------------------
+
+WEB_WIDTH = 1200  # the browser window width web pages are laid out at, in points
+WEB_MAX_HEIGHT = 60000  # endless pages are cut off here
+
+
+def is_url(arg):
+    return re.match(r"(?i)https?://", arg) is not None
+
+
+def fetch_web(url):
+    """Load a web page with WebKit and return it as a one-page PDF (macOS only)."""
+    if sys.platform != "darwin":
+        raise ConversionError("web pages can be shown on macOS only")
+    key = hashlib.sha1(f"{VERSION}\0{url}".encode()).hexdigest()
+    out = os.path.join(_cache_dir(), f"web-{key}.pdf")
+    _status(f"see: loading {re.sub(r'(?i)^https?://', '', url)}…")
+    try:
+        _jxa("url", url, out, paper=(WEB_WIDTH, WEB_MAX_HEIGHT), margin=0)
+        return out
+    except KeyboardInterrupt:
+        raise ConversionError("loading interrupted") from None
+    except subprocess.TimeoutExpired:
+        raise ConversionError("loading timed out") from None
+    finally:
+        _status("")
+
+
 # --- HTML and SVG ------------------------------------------------------------------------
 
 def _web(path, out, work):
@@ -586,7 +614,7 @@ def _jxa(mode, src, out, paper=A4, margin=None):
         margin = 54 if mode == "rich" else 40
     cmd = ["osascript", "-l", "JavaScript", script, mode, str(paper[0]), str(paper[1]), str(margin)]
     for s, o in zip(srcs, outs):
-        cmd += [os.path.abspath(s), o + ".part.pdf"]
+        cmd += [s if mode == "url" else os.path.abspath(s), o + ".part.pdf"]
     r = _run(cmd, MAC_TIMEOUT * len(srcs))
     for o in outs:
         if not _ok_pdf(o + ".part.pdf"):
@@ -632,6 +660,50 @@ function printText(fill, out, w, h, margin) {
   if (!op.runOperation) throw new Error('printing failed');
 }
 
+function evaluate(web, code) {
+  var result = null, done = false;
+  web.evaluateJavaScriptCompletionHandler(code, function (value, error) { result = value; done = true; });
+  for (var t = 0; t < 200 && !done; t++) spin(0.02);
+  return result && !result.isNil() ? result.js : null;
+}
+
+// url: load a web page as a browser window `width` wide, then make the window as tall as
+// the page (so lazy images load too) and save all of it as one PDF page: the screen look
+// rather than the print style, with selectable text and the links kept.
+function snapshot(address, out, width, maxHeight) {
+  $.NSApplication.sharedApplication;
+  var frame = $.NSMakeRect(0, 0, width, 900);
+  var web = $.WKWebView.alloc.initWithFrameConfiguration(frame, $.WKWebViewConfiguration.alloc.init);
+  var win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(frame, 0, $.NSBackingStoreBuffered, false);
+  win.contentView = web;
+  var url = $.NSURL.URLWithString(address);
+  if (!url || url.isNil()) throw new Error('not a web address');
+  web.loadRequest($.NSURLRequest.requestWithURL(url));
+  for (var t = 0; t < 600 && (web.isLoading || t < 4); t++) spin(0.05);
+  spin(0.5);
+  var heightJs = 'Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)';
+  var height = evaluate(web, heightJs);
+  if (!height || !evaluate(web, 'document.body ? document.body.childElementCount : 0'))
+    throw new Error('the page did not load');
+  for (var i = 0; i < 3; i++) {  // growing the window can load more content
+    height = Math.min(height, maxHeight);
+    web.frame = $.NSMakeRect(0, 0, width, height);
+    win.setContentSize($.NSMakeSize(width, height));
+    spin(0.4);
+    for (var t = 0; t < 200 && web.isLoading; t++) spin(0.05);
+    var now = evaluate(web, heightJs) || height;
+    if (Math.min(now, maxHeight) === height) break;
+    height = now;
+  }
+  var config = $.WKPDFConfiguration.alloc.init;
+  config.rect = $.NSMakeRect(0, 0, width, height);
+  var data = null, done = false;
+  web.createPDFWithConfigurationCompletionHandler(config, function (d, e) { data = d; done = true; });
+  for (var t = 0; t < 1200 && !done; t++) spin(0.05);
+  if (!data || data.isNil()) throw new Error('could not capture the page');
+  data.writeToFileAtomically(out, true);
+}
+
 function run(argv) {
   var mode = argv[0];
   var w = parseFloat(argv[1]), h = parseFloat(argv[2]), margin = parseFloat(argv[3]);
@@ -661,6 +733,11 @@ function convert(mode, src, out, w, h, margin) {
       style.minimumLineHeight = 12; style.maximumLineHeight = 12;
       view.textStorage.addAttributeValueRange($.NSParagraphStyleAttributeName, style, $.NSMakeRange(0, view.textStorage.length));
     }, out, w, h, margin);
+    return;
+  }
+
+  if (mode === 'url') {
+    snapshot(src, out, w, h);
     return;
   }
 

@@ -12,7 +12,7 @@ import pypdfium2 as pdfium
 from PIL import Image as PILImage
 from PIL import ImageOps
 
-from .convert import convert
+from .convert import convert, fetch_web, is_url
 
 # Images are measured in "points" like PDF pages, at 96 pixels per inch, so that a
 # zoom level of 100% shows every image pixel as one screen pixel.
@@ -25,6 +25,8 @@ class UnsupportedFile(Exception):
 
 def open_document(path):
     """Open a PDF or an image, deciding by the file's content rather than its name."""
+    if is_url(path):  # a web page, snapshotted as one tall PDF page
+        return Document(fetch_web(path))
     with open(path, "rb") as f:
         head = f.read(1024)
     if b"%PDF-" in head:

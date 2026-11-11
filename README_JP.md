@@ -12,6 +12,7 @@
 - テキスト、Markdown、ソースコード、JSON、CSV / TSV
 - Word、Excel、PowerPoint、Keynote、Numbers、Pages、RTF、OpenDocument（LibreOffice があればそれで、なければ Mac の標準機能で表示）
 - HTML、SVG（Mac のみ）
+- ウェブサイト：`see https://…` でページ全体を縦に長い1枚として表示し、トラックパッドでスクロール（Mac のみ）
 - アニメーション（GIF、APNG、WebP）
 - 動画（MP4、MOV、MKV、WebM、AVI など。ffmpeg が必要）
 
@@ -36,6 +37,7 @@ brew install youkin06/tap/see
 see ファイル.pdf
 see ファイル.pdf --page 5
 see 動画.mp4
+see https://ja.wikipedia.org/wiki/端末エミュレータ
 ```
 
 | マウス・キー | 動き |

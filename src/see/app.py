@@ -6,6 +6,7 @@ import collections
 import math
 import shutil
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -15,6 +16,7 @@ import unicodedata
 import zlib
 
 from . import __version__
+from .convert import is_url
 from .render import Image, UnsupportedFile, kitty_delete, kitty_place, kitty_unplace_all, kitty_upload, open_document
 from .term import (
     NO_GRAPHICS,
@@ -176,7 +178,8 @@ class Viewer:
         self.term = term
         self.doc = open_document(path)
         self.page = 0
-        self.mode = "fit"  # "fit", "width" or "custom"
+        # "fit", "width" or "custom"; web pages are one tall page, so start at full width
+        self.mode = "width" if is_url(path) else "fit"
         self.zoom = 1.0
         self.sx = self.sy = 0.0  # viewport top-left in page pixels at self.zoom
         self.buttons = []  # (x0, x1, action) on the toolbar row
@@ -761,7 +764,7 @@ class Viewer:
         wide = (" Width ", lambda: self.set_mode("width"), "width")
         close = " ✕ "
 
-        name = os.path.basename(self.path)
+        name = re.sub(r"(?i)^https?://(www\.)?", "", self.path).rstrip("/") if is_url(self.path) else os.path.basename(self.path)
         # the file name comes first; drop the least important parts until the rest fits
         # next to at least a recognisable piece of it
         name_min = min(width(name), 12)
@@ -869,12 +872,12 @@ def main(argv=None):
         prog="see",
         description="View PDFs and images in the terminal with mouse controls (kitty graphics protocol).",
     )
-    parser.add_argument("file", help="PDF, image or video file to open")
+    parser.add_argument("file", help="PDF, image, video or other file to open, or a web address (https://…)")
     parser.add_argument("-p", "--page", type=int, default=1, help="page to open (1-based)")
     parser.add_argument("--version", action="version", version=f"see {__version__}")
     args = parser.parse_args(argv)
 
-    if not os.path.isfile(args.file):
+    if not is_url(args.file) and not os.path.isfile(args.file):
         parser.exit(1, f"see: no such file: {args.file}\n")
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         parser.exit(1, "see: must be run in a terminal\n")
@@ -882,7 +885,7 @@ def main(argv=None):
     # Videos have their own player (see video.py).
     from .video import is_video, play
 
-    if is_video(args.file):
+    if not is_url(args.file) and is_video(args.file):
         return play(args.file)
 
     term = Terminal()
