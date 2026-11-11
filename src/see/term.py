@@ -59,6 +59,25 @@ NO_GRAPHICS = (
     "     (Set SEE_FORCE_GRAPHICS=1 to try anyway.)\n"
 )
 
+# herdr answers the kitty graphics query itself, whatever terminal it runs in, and then drops
+# the images if that outer terminal can't show them. These variables, inherited from the
+# terminal that started herdr, show that it can.
+GRAPHICS_TERMINAL_HINTS = ("KITTY_WINDOW_ID", "GHOSTTY_RESOURCES_DIR", "WEZTERM_EXECUTABLE", "WEZTERM_PANE")
+GRAPHICS_TERMINAL_BUNDLES = ("com.mitchellh.ghostty", "net.kovidgoyal.kitty", "com.github.wez.wezterm")
+OUTER_TERMINAL_HINT = "Blank? herdr's outer terminal must show images: use Ghostty, kitty or WezTerm"
+
+
+def outer_terminal_hint(env=os.environ):
+    """A hint for the bottom line when see runs in herdr inside a terminal that may not show
+    images, else None."""
+    if env.get("TERM_PROGRAM") != "herdr" and not env.get("HERDR_ENV"):
+        return None
+    if any(env.get(k) for k in GRAPHICS_TERMINAL_HINTS):
+        return None
+    if env.get("__CFBundleIdentifier") in GRAPHICS_TERMINAL_BUNDLES:
+        return None
+    return OUTER_TERMINAL_HINT
+
 
 @dataclass
 class WindowPixels:

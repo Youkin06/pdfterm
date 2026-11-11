@@ -30,3 +30,12 @@ def test_terminal_replies():
 def test_incomplete_sequences_wait_for_more_input():
     assert parse("\x1b[<64;1") == ([], "\x1b[<64;1")
     assert parse("\x1b_Gi=31;O") == ([], "\x1b_Gi=31;O")
+
+
+def test_outer_terminal_hint_only_inside_herdr_without_a_graphics_terminal():
+    from see.term import outer_terminal_hint
+
+    assert outer_terminal_hint({"TERM_PROGRAM": "Apple_Terminal"}) is None
+    assert outer_terminal_hint({"TERM_PROGRAM": "herdr", "__CFBundleIdentifier": "com.apple.Terminal"})
+    assert outer_terminal_hint({"TERM_PROGRAM": "herdr", "GHOSTTY_RESOURCES_DIR": "/x"}) is None
+    assert outer_terminal_hint({"HERDR_ENV": "1", "__CFBundleIdentifier": "net.kovidgoyal.kitty"}) is None

@@ -9,6 +9,10 @@
 - A demo GIF at the top of the README (`docs/demo.gif`): a blue gradient background,
   sample files in one matching palette, ending on a `❯see` prompt.
 
+- Inside herdr, when the terminal around it doesn't look like Ghostty, kitty or WezTerm, the
+  bottom line says so for 10 seconds at start. herdr answers the graphics query itself, so
+  see can't tell that the images will be dropped, and the page just stayed blank.
+
 ### Changed
 - PDF and documents: a left drag that starts on blank paper moves the page (handy when
   zoomed in); a drag that starts on text still selects and copies it, as in Preview.

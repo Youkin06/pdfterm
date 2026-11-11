@@ -21,6 +21,8 @@ pages, drag to select and copy text, double-click to zoom.
 ## Requirements
 
 - A terminal with kitty graphics: [Ghostty](https://ghostty.org), [kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org), or a [herdr](https://herdr.dev) pane inside one
+  (herdr itself is not enough: in Terminal.app, iTerm2 or VS Code the page stays blank, and see
+  says so on the bottom line)
 - Python 3.10+
 - Optional: [LibreOffice](https://www.libreoffice.org) for Office documents, ffmpeg for video
 
