@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Release see: bump the version, merge it through a PR once CI passes, tag it, and update
-# the Homebrew formula in the tap.
+# Release see: bump the version, merge it through a PR once CI passes, tag it, publish a
+# GitHub release named after its main changes, and update the Homebrew formula in the tap.
 #
-#   scripts/release.sh 0.4.0
+#   scripts/release.sh 0.5.0 "Sound button and drag to pan"
 #
 # Needs: gh (logged in), a clean main checkout, and the tap checked out next to this repo
 # (../homebrew-tap) or at $TAP_DIR. The "## Unreleased" heading in CHANGELOG.md becomes
@@ -10,7 +10,8 @@
 set -euo pipefail
 
 version="${1:-}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "usage: $0 X.Y.Z" >&2; exit 2; }
+name="${2:-}"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && -n "$name" ]] || { echo "usage: $0 X.Y.Z \"Release name\"" >&2; exit 2; }
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 tap_dir="${TAP_DIR:-$repo_dir/../homebrew-tap}"
 tag="v$version"
@@ -51,6 +52,9 @@ git checkout -q main && git pull -q --ff-only
 git branch -D "$branch" 2>/dev/null || true
 git tag -a "$tag" -m "see $version"
 git push -q origin "$tag"
+
+step "Publishing the GitHub release"
+scripts/release-notes.sh "$version" | gh release create "$tag" --title "see $version — $name" --notes-file - --verify-tag
 
 step "Updating the Homebrew formula"
 tarball="https://github.com/Youkin06/see/archive/refs/tags/$tag.tar.gz"

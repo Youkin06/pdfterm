@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `scripts/release.sh X.Y.Z "Name"` also publishes a GitHub release titled
+  `see X.Y.Z — Name`, with that version's CHANGELOG section as its notes
+  (`scripts/release-notes.sh`).
+
 ## 0.5.0 — 2026-11-11
 
 ### Added
@@ -8,7 +15,6 @@
   sound.
 - A demo GIF at the top of the README (`docs/demo.gif`): a blue gradient background,
   sample files in one matching palette, ending on a `❯see` prompt.
-
 - Inside herdr, when the terminal around it doesn't look like Ghostty, kitty or WezTerm, the
   bottom line says so for 10 seconds at start. herdr answers the graphics query itself, so
   see can't tell that the images will be dropped, and the page just stayed blank.
