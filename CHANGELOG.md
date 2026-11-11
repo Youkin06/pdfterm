@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-11-11
 
 ### Added
 - Video: a sound on/off button at the bottom right of the player (`m` toggles it too): a white
