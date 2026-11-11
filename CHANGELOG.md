@@ -13,6 +13,10 @@
   `see X.Y.Z — Name`, with that version's CHANGELOG section as its notes
   (`scripts/release-notes.sh`).
 
+### Fixed
+- A click on blank paper clears the text selection again (since dragging from blank paper
+  moves the page, it had kept the selection).
+
 ## 0.5.0 — 2026-11-11
 
 ### Added
